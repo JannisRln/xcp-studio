@@ -50,3 +50,6 @@ mod tests {
 }
 
 pub mod xcp;
+
+#[cfg(windows)]
+pub mod pcan;
