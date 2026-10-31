@@ -98,8 +98,8 @@ fn no_response_returns_error() {
 
 #[test]
 fn ignores_unrelated_can_frames() {
-    use xcp_core::{CanFrame, CanTransport, TransportError};
     use std::collections::VecDeque;
+    use xcp_core::{CanFrame, CanTransport, TransportError};
 
     struct NoisyTransport {
         frames: VecDeque<CanFrame>,
@@ -151,7 +151,7 @@ fn unrelated_traffic_respects_deadline() {
         }
     }
 
-    let mut master = XcpMaster::new(BusyTransport, CanIds::default())
-        .with_response_timeout(Duration::ZERO);
+    let mut master =
+        XcpMaster::new(BusyTransport, CanIds::default()).with_response_timeout(Duration::ZERO);
     assert!(matches!(master.connect(), Err(XcpError::NoResponse)));
 }
