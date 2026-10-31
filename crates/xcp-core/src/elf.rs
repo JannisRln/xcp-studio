@@ -65,6 +65,69 @@ pub fn inspect_bytes(bytes: &[u8]) -> Result<Vec<ElfSymbol>, ElfError> {
     Ok(symbols)
 }
 
+use gimli::{EndianRcSlice, RunTimeEndian};
+use object::ObjectSection;
+use std::rc::Rc;
+
+/// Summary of DWARF information available in an ELF firmware image.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DwarfSummary {
+    pub has_debug_info: bool,
+    pub compilation_units: usize,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum DwarfError {
+    #[error(transparent)]
+    Object(#[from] object::Error),
+    #[error(transparent)]
+    Dwarf(#[from] gimli::Error),
+    #[error("expected an ELF file")]
+    NotElf,
+}
+
+/// Count DWARF compilation units without requiring the ECU to be connected.
+/// An ELF without .debug_info returns an empty summary.
+pub fn inspect_dwarf(bytes: &[u8]) -> Result<DwarfSummary, DwarfError> {
+    let file = object::File::parse(bytes)?;
+    if file.format() != object::BinaryFormat::Elf {
+        return Err(DwarfError::NotElf);
+    }
+
+    let endian = if file.is_little_endian() {
+        RunTimeEndian::Little
+    } else {
+        RunTimeEndian::Big
+    };
+    let has_debug_info = file
+        .section_by_name(".debug_info")
+        .map(|section| section.size() > 0)
+        .unwrap_or(false);
+    if !has_debug_info {
+        return Ok(DwarfSummary {
+            has_debug_info: false,
+            compilation_units: 0,
+        });
+    }
+
+    let dwarf = gimli::Dwarf::load(|section_id| {
+        let data = match file.section_by_name(section_id.name()) {
+            Some(section) => section.uncompressed_data()?.into_owned(),
+            None => Vec::new(),
+        };
+        Ok::<_, object::Error>(EndianRcSlice::new(Rc::from(data), endian))
+    })?;
+    let mut units = dwarf.units();
+    let mut compilation_units = 0;
+    while units.next()?.is_some() {
+        compilation_units += 1;
+    }
+    Ok(DwarfSummary {
+        has_debug_info,
+        compilation_units,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -72,5 +135,6 @@ mod tests {
     #[test]
     fn rejects_invalid_elf() {
         assert!(inspect_bytes(b"not an ELF").is_err());
+        assert!(inspect_dwarf(b"not an ELF").is_err());
     }
 }
