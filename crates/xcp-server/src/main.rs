@@ -9,7 +9,11 @@ struct Health {
 }
 
 async fn health() -> Json<Health> {
-    Json(Health { status: "ok", mode: "simulation", version: env!("CARGO_PKG_VERSION") })
+    Json(Health {
+        status: "ok",
+        mode: "simulation",
+        version: env!("CARGO_PKG_VERSION"),
+    })
 }
 
 #[tokio::main]
