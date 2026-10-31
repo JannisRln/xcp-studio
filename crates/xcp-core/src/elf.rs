@@ -136,5 +136,6 @@ mod tests {
     #[test]
     fn rejects_invalid_elf() {
         assert!(inspect_bytes(b"not an ELF").is_err());
+        assert!(inspect_dwarf(b"not an ELF").is_err());
     }
 }
