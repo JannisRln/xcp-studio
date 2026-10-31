@@ -65,7 +65,6 @@ pub fn inspect_bytes(bytes: &[u8]) -> Result<Vec<ElfSymbol>, ElfError> {
     Ok(symbols)
 }
 
-
 use gimli::{EndianRcSlice, RunTimeEndian};
 use object::ObjectSection;
 use std::rc::Rc;
