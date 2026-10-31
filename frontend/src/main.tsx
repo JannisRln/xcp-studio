@@ -41,6 +41,12 @@ function App() {
   const [elfQuery, setElfQuery] = useState("");
   const [elfError, setElfError] = useState("");
   const [elfLoading, setElfLoading] = useState(false);
+  const [sessionConnected, setSessionConnected] = useState(false);
+  const [sessionBusy, setSessionBusy] = useState(false);
+  const [readAddress, setReadAddress] = useState("0x1000");
+  const [readCount, setReadCount] = useState(4);
+  const [readResult, setReadResult] = useState("");
+  const [sessionError, setSessionError] = useState("");
   const [channel, setChannel] = useState("PCAN-USB 1");
   const [bitrate, setBitrate] = useState("500 kbit/s");
   const [log, setLog] = useState<string[]>(["Workspace initialized", "Demo signal generator available"]);
@@ -59,12 +65,57 @@ function App() {
       setChecking(false);
     }
   };
-  useEffect(() => { void checkHealth(); }, []);
+  useEffect(() => {
+    void checkHealth();
+    void fetch("/api/xcp/status").then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setSessionConnected(Boolean(data.connected)); })
+      .catch(() => {});
+  }, []);
   useEffect(() => {
     if (!running) return;
     const id = window.setInterval(() => setTick(t => t + 1), 180);
     return () => window.clearInterval(id);
   }, [running]);
+  const sessionAction = async (action: "connect" | "disconnect") => {
+    setSessionBusy(true);
+    setSessionError("");
+    try {
+      const response = await fetch(`/api/xcp/${action}`, { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? `HTTP ${response.status}`);
+      setSessionConnected(Boolean(data.connected));
+      setReadResult("");
+      record(`Simulator XCP ${action}`);
+    } catch (error) {
+      setSessionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSessionBusy(false);
+    }
+  };
+  const readMemory = async (addressText = readAddress, count = readCount) => {
+    setSessionBusy(true);
+    setSessionError("");
+    try {
+      const address = Number(addressText);
+      if (!Number.isSafeInteger(address) || address < 0 || address > 0xFFFFFFFF ||
+          !Number.isInteger(count) || count < 1 || count > 4096) {
+        throw new Error("Invalid address or byte count");
+      }
+      const response = await fetch("/api/xcp/read", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address, count }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? `HTTP ${response.status}`);
+      setReadResult(`${addressText}: ${data.hex}`);
+      record(`Read ${count} bytes at ${addressText} from simulated ECU`);
+    } catch (error) {
+      setSessionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSessionBusy(false);
+    }
+  };
   const loadElf = async (file: File | undefined) => {
     if (!file) return;
     setElfLoading(true);
@@ -127,7 +178,7 @@ function App() {
         {page === "Overview" && <>
           <div className="metric-grid">
             <div className="metric"><span>BACKEND API</span><strong>{health ? "Online" : "Offline"}</strong><small>{health ? `Mode: ${health.mode}` : "Start xcp-server to connect"}</small></div>
-            <div className="metric"><span>HARDWARE CONNECTION</span><strong>Not connected</strong><small>PCAN integration: backend pending</small></div>
+            <div className="metric"><span>HARDWARE CONNECTION</span><strong>Not connected</strong><small>Simulator API available · PCAN pending</small></div>
             <div className="metric"><span>DEMO SIGNALS</span><strong>{selected.length} <em>/ {signals.length}</em></strong><small>Local signal generator</small></div>
             <div className="metric"><span>ACQUISITION</span><strong>{running ? "Running" : "Paused"}</strong><small>Demo only · no ECU traffic</small></div>
           </div>
@@ -160,13 +211,13 @@ function App() {
           {elfError && <p className="error-text">{elfError}</p>}
           <div className="elf-summary">{elfSymbols.length} symbols loaded · Showing {filteredElf.length} · Maximum 500 rows</div>
           <div className="elf-table-wrap"><table className="elf-table"><thead><tr><th>Symbol</th><th>Address</th><th>Size</th><th>Kind</th></tr></thead><tbody>
-          {filteredElf.map((s, i) => <tr key={s.name + s.address_hex + i}><td title={s.name}>{s.name}</td><td><code>{s.address_hex}</code></td><td>{s.size} B</td><td>{s.kind}</td></tr>)}
+          {filteredElf.map((s, i) => <tr key={s.name + s.address_hex + i}><td title={s.name}>{s.name}</td><td><code>{s.address_hex}</code></td><td>{s.size} B</td><td>{s.kind} {s.kind === "data" && <button className="inline-read" disabled={!sessionConnected || s.address > 0xFFFFFFFF || s.size === 0} onClick={() => { setReadAddress(s.address_hex); setReadCount(Math.min(s.size, 64)); setPage("Connections"); }}>Read →</button>}</td></tr>)}
           </tbody></table>{filteredElf.length === 0 && <div className="empty">{elfSymbols.length ? "No matching symbols." : "Choose an ELF file to browse its symbols."}</div>}</div>
           <div className="notice"><strong>Symbol inspection only</strong><p>DWARF types, pointer chains, runtime relocation and live XCP reads are not implemented. Symbols are not live ECU values.</p></div>
         </section>}
         {page === "Connections" && <div className="two-column">
-          <section className="panel form-panel"><div className="panel-head"><div><h2>CAN interface</h2><p>Local configuration preview</p></div></div><label className="field">Adapter<select value={channel} onChange={e => setChannel(e.target.value)}><option>PCAN-USB 1</option><option>PCAN-USB 2</option><option>Vector VN1640A</option></select></label><label className="field">Bitrate<select value={bitrate} onChange={e => setBitrate(e.target.value)}><option>125 kbit/s</option><option>250 kbit/s</option><option>500 kbit/s</option><option>1 Mbit/s</option></select></label><div className="field"><span>Command CAN ID</span><code>0x667</code></div><div className="field"><span>Response CAN ID</span><code>0x666</code></div><div className="notice"><strong>Hardware connection unavailable</strong><p>Adapter selection is saved only in this page. The current server exposes a health endpoint, not a hardware connect API.</p></div><button className="primary" disabled>Connect to ECU (coming soon)</button></section>
-          <section className="panel"><div className="panel-head"><div><h2>Connection status</h2><p>Actual server status</p></div><button className="secondary" onClick={() => void checkHealth()} disabled={checking}>Refresh</button></div><div className="detail-line"><span>Backend</span><strong>{health ? "Reachable" : "Unavailable"}</strong></div><div className="detail-line"><span>Server mode</span><strong>{health?.mode ?? "—"}</strong></div><div className="detail-line"><span>Server version</span><strong>{health?.version ?? "—"}</strong></div><div className="detail-line"><span>CAN adapter</span><strong>Disconnected</strong></div><div className="detail-line"><span>XCP session</span><strong>Not established</strong></div>{apiError && <p className="error-text">API error: {apiError}</p>}</section>
+          <section className="panel form-panel"><div className="panel-head"><div><h2>CAN interface</h2><p>Local configuration preview</p></div></div><label className="field">Adapter<select value={channel} onChange={e => setChannel(e.target.value)}><option>PCAN-USB 1</option><option>PCAN-USB 2</option><option>Vector VN1640A</option></select></label><label className="field">Bitrate<select value={bitrate} onChange={e => setBitrate(e.target.value)}><option>125 kbit/s</option><option>250 kbit/s</option><option>500 kbit/s</option><option>1 Mbit/s</option></select></label><div className="field"><span>Command CAN ID</span><code>0x667</code></div><div className="field"><span>Response CAN ID</span><code>0x666</code></div><div className="notice"><strong>Hardware connection unavailable</strong><p>Adapter selection is saved only in this page. The current server exposes a health endpoint, not a hardware connect API.</p></div><div className="button-group"><button className="primary" disabled={sessionBusy || sessionConnected} onClick={() => void sessionAction("connect")}>Connect simulator</button><button className="secondary" disabled={sessionBusy || !sessionConnected} onClick={() => void sessionAction("disconnect")}>Disconnect</button></div>{sessionError && <p className="error-text">{sessionError}</p>}</section>
+          <section className="panel"><div className="panel-head"><div><h2>Connection status</h2><p>Actual server status</p></div><button className="secondary" onClick={() => void checkHealth()} disabled={checking}>Refresh</button></div><div className="detail-line"><span>Backend</span><strong>{health ? "Reachable" : "Unavailable"}</strong></div><div className="detail-line"><span>Server mode</span><strong>{health?.mode ?? "—"}</strong></div><div className="detail-line"><span>Server version</span><strong>{health?.version ?? "—"}</strong></div><div className="detail-line"><span>CAN adapter</span><strong>Hardware disconnected</strong></div><div className="detail-line"><span>Simulator XCP session</span><strong>{sessionConnected ? "Connected" : "Disconnected"}</strong></div>{apiError && <p className="error-text">API error: {apiError}</p>}<div className="read-widget"><h3>Read simulated ECU memory</h3><label className="field">Address<input className="search" value={readAddress} onChange={e => setReadAddress(e.target.value)} /></label><label className="field">Bytes<input className="search" type="number" min="1" max="4096" value={readCount} onChange={e => setReadCount(Number(e.target.value))} /></label><button className="primary" disabled={!sessionConnected || sessionBusy} onClick={() => void readMemory()}>Read memory</button>{readResult && <pre className="read-result">{readResult}</pre>}</div></section>
         </div>}
         {page === "Calibration" && <div className="two-column"><section className="panel"><div className="panel-head"><div><h2>Calibration variables</h2><p>ECU memory access</p></div></div><div className="placeholder-icon">⚙</div><h3>Calibration not yet available</h3><p className="muted">The XCP core supports memory read/write operations, but the server does not expose calibration endpoints yet. No values are fabricated here.</p><button className="secondary" onClick={() => setPage("Connections")}>View connection setup →</button></section><section className="panel"><div className="panel-head"><div><h2>Planned workflow</h2><p>Integration roadmap</p></div></div><div className="roadmap"><div><b>01</b><span>Connect to CAN adapter</span></div><div><b>02</b><span>Establish XCP session</span></div><div><b>03</b><span>Load A2L variable definitions</span></div><div><b>04</b><span>Read, edit and verify calibration values</span></div></div></section></div>}
         {page === "Diagnostics" && <div className="two-column"><section className="panel"><div className="panel-head"><div><h2>Backend diagnostics</h2><p>Server health endpoint</p></div><button className="secondary" onClick={() => void checkHealth()} disabled={checking}>↻ Check now</button></div><div className="detail-line"><span>Endpoint</span><code>/api/health</code></div><div className="detail-line"><span>HTTP status</span><strong>{health ? "Healthy" : "Unavailable"}</strong></div><div className="detail-line"><span>Execution mode</span><strong>{health?.mode ?? "—"}</strong></div><div className="detail-line"><span>Version</span><strong>{health?.version ?? "—"}</strong></div>{apiError && <p className="error-text">{apiError}</p>}</section><section className="panel"><div className="panel-head"><div><h2>Workspace events</h2><p>Local UI activity</p></div><button className="secondary" onClick={() => setLog([])}>Clear</button></div><div className="event-list">{log.length ? log.map((entry, i) => <div key={i} className="event"><span className="status-dot" />{entry}</div>) : <div className="empty">No events recorded.</div>}</div></section></div>}
