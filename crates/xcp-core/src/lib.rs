@@ -45,3 +45,5 @@ mod tests {
         assert_eq!(bus.receive().unwrap(), Some(frame));
     }
 }
+
+pub mod xcp;
