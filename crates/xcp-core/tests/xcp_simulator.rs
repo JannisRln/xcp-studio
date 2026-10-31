@@ -75,3 +75,83 @@ fn rejects_oversized_cto_payload() {
         Err(XcpError::InvalidParameters)
     ));
 }
+
+#[test]
+fn no_response_returns_error() {
+    use xcp_core::{CanFrame, CanTransport, TransportError};
+
+    struct SilentTransport;
+
+    impl CanTransport for SilentTransport {
+        fn send(&mut self, _frame: CanFrame) -> Result<(), TransportError> {
+            Ok(())
+        }
+
+        fn receive(&mut self) -> Result<Option<CanFrame>, TransportError> {
+            Ok(None)
+        }
+    }
+
+    let mut master = XcpMaster::new(SilentTransport, CanIds::default());
+    assert!(matches!(master.connect(), Err(XcpError::NoResponse)));
+}
+
+#[test]
+fn ignores_unrelated_can_frames() {
+    use xcp_core::{CanFrame, CanTransport, TransportError};
+    use std::collections::VecDeque;
+
+    struct NoisyTransport {
+        frames: VecDeque<CanFrame>,
+    }
+
+    impl CanTransport for NoisyTransport {
+        fn send(&mut self, _frame: CanFrame) -> Result<(), TransportError> {
+            Ok(())
+        }
+
+        fn receive(&mut self) -> Result<Option<CanFrame>, TransportError> {
+            Ok(self.frames.pop_front())
+        }
+    }
+
+    let ids = CanIds::default();
+    let mut frames = VecDeque::new();
+    for _ in 0..100 {
+        frames.push_back(CanFrame {
+            id: 0x123,
+            data: vec![0xff],
+        });
+    }
+    frames.push_back(CanFrame {
+        id: ids.response,
+        data: vec![0xff, 0x01],
+    });
+    let mut master = XcpMaster::new(NoisyTransport { frames }, ids);
+    assert_eq!(master.connect().unwrap(), vec![0x01]);
+}
+
+#[test]
+fn unrelated_traffic_respects_deadline() {
+    use std::time::Duration;
+    use xcp_core::{CanFrame, CanTransport, TransportError};
+
+    struct BusyTransport;
+
+    impl CanTransport for BusyTransport {
+        fn send(&mut self, _frame: CanFrame) -> Result<(), TransportError> {
+            Ok(())
+        }
+
+        fn receive(&mut self) -> Result<Option<CanFrame>, TransportError> {
+            Ok(Some(CanFrame {
+                id: 0x123,
+                data: vec![0xff],
+            }))
+        }
+    }
+
+    let mut master = XcpMaster::new(BusyTransport, CanIds::default())
+        .with_response_timeout(Duration::ZERO);
+    assert!(matches!(master.connect(), Err(XcpError::NoResponse)));
+}
