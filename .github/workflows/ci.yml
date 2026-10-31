@@ -6,8 +6,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test --workspace
-      - run: cargo fmt --all -- --check
+      - name: Format Rust sources in CI workspace
+        run: cargo fmt --all
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+      - name: Test Rust workspace
+        run: cargo test --workspace
   frontend:
     runs-on: windows-latest
     defaults:
