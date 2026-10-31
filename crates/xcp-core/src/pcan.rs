@@ -129,7 +129,9 @@ impl PcanTransport {
 }
 
 fn status_error(operation: &str, status: u32) -> TransportError {
-    TransportError::Other(format!("{operation} failed with PCAN status 0x{status:08X}"))
+    TransportError::Other(format!(
+        "{operation} failed with PCAN status 0x{status:08X}"
+    ))
 }
 
 impl CanTransport for PcanTransport {
