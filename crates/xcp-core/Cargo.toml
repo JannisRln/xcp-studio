@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 thiserror = "2"
 object = "0.36"
+gimli = { version = "0.31", features = ["read"] }
 
 [target.'cfg(windows)'.dependencies]
 libloading = "0.8"
