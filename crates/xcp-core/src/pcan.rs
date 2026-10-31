@@ -171,6 +171,10 @@ impl CanTransport for PcanTransport {
                 }
                 _ => return Err(status_error("CAN_Read", status)),
             }
+            // A continuous stream of filtered frames must not bypass the timeout.
+            if start.elapsed() >= self.receive_timeout {
+                return Ok(None);
+            }
         }
     }
 }
