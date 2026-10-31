@@ -53,3 +53,5 @@ pub mod xcp;
 
 #[cfg(windows)]
 pub mod pcan;
+
+pub mod elf;
