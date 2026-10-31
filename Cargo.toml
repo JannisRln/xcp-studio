@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/xcp-core", "crates/xcp-server"]
+resolver = "2"
