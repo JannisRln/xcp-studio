@@ -70,7 +70,6 @@ async fn inspect_elf(
     Ok(Json(ElfResult { symbols, count }))
 }
 
-
 #[derive(Serialize)]
 struct SessionStatus {
     connected: bool,
@@ -98,13 +97,19 @@ async fn session_status(State(session): State<Session>) -> Json<SessionStatus> {
     })
 }
 
-async fn session_connect(State(session): State<Session>) -> Result<Json<SessionStatus>, (StatusCode, Json<ApiError>)> {
+async fn session_connect(
+    State(session): State<Session>,
+) -> Result<Json<SessionStatus>, (StatusCode, Json<ApiError>)> {
     let mut guard = session.lock().unwrap_or_else(|e| e.into_inner());
     if guard.is_none() {
         let ids = CanIds::default();
         let mut slave = SimulatedSlave::new(0x1000, 65536);
-        slave.load(0x1000, &1850u32.to_le_bytes()).map_err(session_error)?;
-        slave.load(0x1004, &88.5f32.to_le_bytes()).map_err(session_error)?;
+        slave
+            .load(0x1000, &1850u32.to_le_bytes())
+            .map_err(session_error)?;
+        slave
+            .load(0x1004, &88.5f32.to_le_bytes())
+            .map_err(session_error)?;
         let transport = SimulatedTransport::new(slave, ids);
         let mut master = XcpMaster::new(transport, ids);
         master.connect().map_err(session_error)?;
@@ -113,7 +118,9 @@ async fn session_connect(State(session): State<Session>) -> Result<Json<SessionS
     Ok(Json(SessionStatus { connected: true, transport: "simulation" }))
 }
 
-async fn session_disconnect(State(session): State<Session>) -> Result<Json<SessionStatus>, (StatusCode, Json<ApiError>)> {
+async fn session_disconnect(
+    State(session): State<Session>,
+) -> Result<Json<SessionStatus>, (StatusCode, Json<ApiError>)> {
     let mut guard = session.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(master) = guard.as_mut() {
         master.disconnect().map_err(session_error)?;
@@ -123,7 +130,12 @@ async fn session_disconnect(State(session): State<Session>) -> Result<Json<Sessi
 }
 
 fn session_error(error: impl std::fmt::Display) -> (StatusCode, Json<ApiError>) {
-    (StatusCode::BAD_REQUEST, Json(ApiError { error: error.to_string() }))
+    (
+        StatusCode::BAD_REQUEST,
+        Json(ApiError {
+            error: error.to_string(),
+        }),
+    )
 }
 
 async fn session_read(
@@ -134,10 +146,22 @@ async fn session_read(
         return Err(session_error("count must be between 1 and 4096"));
     }
     let mut guard = session.lock().unwrap_or_else(|e| e.into_inner());
-    let master = guard.as_mut().ok_or_else(|| session_error("XCP session not connected"))?;
-    let bytes = master.read(request.address, request.count).map_err(session_error)?;
-    let hex = bytes.iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(" ");
-    Ok(Json(ReadResult { address: request.address, bytes, hex }))
+    let master = guard
+        .as_mut()
+        .ok_or_else(|| session_error("XCP session not connected"))?;
+    let bytes = master
+        .read(request.address, request.count)
+        .map_err(session_error)?;
+    let hex = bytes
+        .iter()
+        .map(|b| format!("{b:02X}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    Ok(Json(ReadResult {
+        address: request.address,
+        bytes,
+        hex,
+    }))
 }
 
 #[tokio::main]
