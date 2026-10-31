@@ -25,4 +25,4 @@ cargo fmt --all -- --check
 cargo test --workspace
 ```
 
-The pre-commit hook checks formatting and rejects unformatted commits; it deliberately does not modify files. CI independently checks formatting and tests on every pull request. GitHub API-created commits bypass local hooks, so their CI results must be verified before merging.
+The pre-commit hook checks formatting and rejects unformatted commits; it deliberately does not modify files. CI runs `cargo fmt --all` in its temporary runner before tests. This does not commit formatted files back to GitHub. The local pre-commit hook still checks committed source formatting. GitHub API-created commits bypass local hooks, so their CI results must be verified before merging.
