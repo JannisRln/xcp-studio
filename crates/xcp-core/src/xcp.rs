@@ -3,6 +3,7 @@
 //! Multi-byte command fields use XCP little-endian byte order in this simulator.
 
 use crate::{CanFrame, CanTransport, TransportError};
+use std::time::{Duration, Instant};
 
 pub const CONNECT: u8 = 0xFF;
 pub const DISCONNECT: u8 = 0xFE;
@@ -50,11 +51,23 @@ pub enum XcpError {
 pub struct XcpMaster<T: CanTransport> {
     transport: T,
     ids: CanIds,
+    response_timeout: Duration,
 }
 
 impl<T: CanTransport> XcpMaster<T> {
     pub fn new(transport: T, ids: CanIds) -> Self {
-        Self { transport, ids }
+        Self {
+            transport,
+            ids,
+            response_timeout: Duration::from_millis(500),
+        }
+    }
+
+    /// Set the maximum time allowed for a command response.
+    /// Transport receive calls should have their own bounded timeout.
+    pub fn with_response_timeout(mut self, timeout: Duration) -> Self {
+        self.response_timeout = timeout;
+        self
     }
 
     fn request(&mut self, command: &[u8]) -> Result<Vec<u8>, XcpError> {
@@ -65,13 +78,17 @@ impl<T: CanTransport> XcpMaster<T> {
             id: self.ids.command,
             data: command.to_vec(),
         })?;
-        // The synchronous transport contract returns None when no frame is available.
-        // Production adapters will add timeouts and response correlation.
-        for _ in 0..64 {
+        // Ignore unrelated CAN traffic until the deadline or receive timeout.
+        // The transport must bound individual receive calls.
+        let started = Instant::now();
+        loop {
             let Some(frame) = self.transport.receive()? else {
-                break;
+                return Err(XcpError::NoResponse);
             };
             if frame.id != self.ids.response {
+                if started.elapsed() >= self.response_timeout {
+                    return Err(XcpError::NoResponse);
+                }
                 continue;
             }
             match frame.data.first().copied() {
@@ -82,7 +99,6 @@ impl<T: CanTransport> XcpMaster<T> {
                 _ => return Err(XcpError::InvalidResponse),
             }
         }
-        Err(XcpError::NoResponse)
     }
 
     pub fn connect(&mut self) -> Result<Vec<u8>, XcpError> {
