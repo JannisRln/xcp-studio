@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
 
-type Page = "Overview" | "Measurements" | "Calibration" | "Connections" | "Diagnostics";
+type Page = "Overview" | "Measurements" | "ELF Explorer" | "Calibration" | "Connections" | "Diagnostics";
+type ElfSymbol = { name: string; address: number; address_hex: string; size: number; kind: string };
 type Health = { status: string; mode: string; version: string };
 type Signal = { name: string; unit: string; color: string; base: number; amplitude: number; precision: number };
 const signals: Signal[] = [
@@ -12,7 +13,7 @@ const signals: Signal[] = [
   { name: "Throttle position", unit: "%", color: "#bd9cff", base: 34, amplitude: 18, precision: 1 },
   { name: "Intake pressure", unit: "kPa", color: "#f18fa7", base: 98, amplitude: 12, precision: 1 },
 ];
-const icons: Record<Page, string> = { Overview: "◫", Measurements: "⌁", Calibration: "⚙", Connections: "⇄", Diagnostics: "⊞" };
+const icons: Record<Page, string> = { Overview: "◫", Measurements: "⌁", "ELF Explorer": "◇", Calibration: "⚙", Connections: "⇄", Diagnostics: "⊞" };
 const sample = (signal: Signal, tick: number) =>
   signal.base + Math.sin(tick * 0.17 + signals.indexOf(signal) * 1.4) * signal.amplitude
   + Math.sin(tick * 0.047 + signals.indexOf(signal)) * signal.amplitude * 0.24;
@@ -35,6 +36,11 @@ function App() {
   const [running, setRunning] = useState(true);
   const [selected, setSelected] = useState<string[]>(signals.slice(0, 3).map(s => s.name));
   const [query, setQuery] = useState("");
+  const [elfSymbols, setElfSymbols] = useState<ElfSymbol[]>([]);
+  const [elfName, setElfName] = useState("");
+  const [elfQuery, setElfQuery] = useState("");
+  const [elfError, setElfError] = useState("");
+  const [elfLoading, setElfLoading] = useState(false);
   const [channel, setChannel] = useState("PCAN-USB 1");
   const [bitrate, setBitrate] = useState("500 kbit/s");
   const [log, setLog] = useState<string[]>(["Workspace initialized", "Demo signal generator available"]);
@@ -59,6 +65,33 @@ function App() {
     const id = window.setInterval(() => setTick(t => t + 1), 180);
     return () => window.clearInterval(id);
   }, [running]);
+  const loadElf = async (file: File | undefined) => {
+    if (!file) return;
+    setElfLoading(true);
+    setElfError("");
+    setElfSymbols([]);
+    setElfName(file.name);
+    try {
+      if (file.size > 32 * 1024 * 1024) throw new Error("File exceeds the 32 MiB upload limit");
+      const response = await fetch("/api/elf/inspect", {
+        method: "POST",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: file,
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? `HTTP ${response.status}`);
+      setElfSymbols(data.symbols as ElfSymbol[]);
+      record(`Inspected ELF: ${file.name} (${data.count} symbols)`);
+    } catch (error) {
+      setElfError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setElfLoading(false);
+    }
+  };
+  const filteredElf = useMemo(() => elfSymbols.filter(s =>
+    s.name.toLowerCase().includes(elfQuery.toLowerCase()) ||
+    s.address_hex.toLowerCase().includes(elfQuery.toLowerCase())
+  ).slice(0, 500), [elfSymbols, elfQuery]);
   const visible = useMemo(() => signals.filter(s => s.name.toLowerCase().includes(query.toLowerCase())), [query]);
   const active = signals.filter(s => selected.includes(s.name));
   const toggleSignal = (name: string) => setSelected(current => current.includes(name) ? current.filter(s => s !== name) : [...current, name]);
@@ -90,7 +123,7 @@ function App() {
         <div className="top-actions"><span className={health ? "api-status online" : "api-status"}><span className="status-dot" /> API {health ? "reachable" : "offline"}</span><button className="icon-button" onClick={() => void checkHealth()} disabled={checking} title="Refresh backend status">↻</button><div className="avatar">XS</div></div>
       </header>
       <main className="content">
-        <div className="heading"><div><div className="eyebrow">XCP STUDIO / {page.toUpperCase()}</div><h1>{page}</h1><p className="subtitle">{page === "Overview" ? "Your measurement and calibration workspace at a glance." : page === "Measurements" ? "Explore simulated signal streams and export sample data." : page === "Connections" ? "Configure a CAN channel and inspect backend readiness." : page === "Calibration" ? "Calibration workspace and feature readiness." : "Backend connectivity and workspace event log."}</p></div><span className="demo-badge">● SIMULATED DATA</span></div>
+        <div className="heading"><div><div className="eyebrow">XCP STUDIO / {page.toUpperCase()}</div><h1>{page}</h1><p className="subtitle">{page === "Overview" ? "Your measurement and calibration workspace at a glance." : page === "Measurements" ? "Explore simulated signal streams and export sample data." : page === "ELF Explorer" ? "Inspect ELF symbols, addresses and sizes." : page === "Connections" ? "Configure a CAN channel and inspect backend readiness." : page === "Calibration" ? "Calibration workspace and feature readiness." : "Backend connectivity and workspace event log."}</p></div><span className="demo-badge">● SIMULATED DATA</span></div>
         {page === "Overview" && <>
           <div className="metric-grid">
             <div className="metric"><span>BACKEND API</span><strong>{health ? "Online" : "Offline"}</strong><small>{health ? `Mode: ${health.mode}` : "Start xcp-server to connect"}</small></div>
@@ -119,6 +152,18 @@ function App() {
             <div className="signal-cards">{active.map(s => <div className="signal-card" key={s.name}><div className="signal-value"><span><i style={{ background: s.color }} />{s.name}</span><strong>{sample(s, tick).toFixed(s.precision)} <small>{s.unit}</small></strong></div><Sparkline signal={s} tick={tick} large /></div>)}{active.length === 0 && <div className="empty">Select a signal from the browser.</div>}</div>
           </section>
         </div>}
+        {page === "ELF Explorer" && <section className="panel">
+          <div className="panel-head"><div><h2>ELF symbol explorer</h2><p>Inspect .symtab and .dynsym via the Rust backend</p></div><span className="demo-badge">LINK-TIME ADDRESSES</span></div>
+          <div className="elf-toolbar"><label className="upload-button">↑ Choose ELF file<input type="file" accept=".elf,.axf,.out,.bin" onChange={e => void loadElf(e.target.files?.[0])} /></label>
+          <span className="muted">{elfLoading ? "Inspecting file..." : elfName || "No file selected"}</span>
+          <input className="search" placeholder="Filter by symbol or address..." value={elfQuery} onChange={e => setElfQuery(e.target.value)} aria-label="Filter ELF symbols" /></div>
+          {elfError && <p className="error-text">{elfError}</p>}
+          <div className="elf-summary">{elfSymbols.length} symbols loaded · Showing {filteredElf.length} · Maximum 500 rows</div>
+          <div className="elf-table-wrap"><table className="elf-table"><thead><tr><th>Symbol</th><th>Address</th><th>Size</th><th>Kind</th></tr></thead><tbody>
+          {filteredElf.map((s, i) => <tr key={s.name + s.address_hex + i}><td title={s.name}>{s.name}</td><td><code>{s.address_hex}</code></td><td>{s.size} B</td><td>{s.kind}</td></tr>)}
+          </tbody></table>{filteredElf.length === 0 && <div className="empty">{elfSymbols.length ? "No matching symbols." : "Choose an ELF file to browse its symbols."}</div>}</div>
+          <div className="notice"><strong>Symbol inspection only</strong><p>DWARF types, pointer chains, runtime relocation and live XCP reads are not implemented. Symbols are not live ECU values.</p></div>
+        </section>}
         {page === "Connections" && <div className="two-column">
           <section className="panel form-panel"><div className="panel-head"><div><h2>CAN interface</h2><p>Local configuration preview</p></div></div><label className="field">Adapter<select value={channel} onChange={e => setChannel(e.target.value)}><option>PCAN-USB 1</option><option>PCAN-USB 2</option><option>Vector VN1640A</option></select></label><label className="field">Bitrate<select value={bitrate} onChange={e => setBitrate(e.target.value)}><option>125 kbit/s</option><option>250 kbit/s</option><option>500 kbit/s</option><option>1 Mbit/s</option></select></label><div className="field"><span>Command CAN ID</span><code>0x667</code></div><div className="field"><span>Response CAN ID</span><code>0x666</code></div><div className="notice"><strong>Hardware connection unavailable</strong><p>Adapter selection is saved only in this page. The current server exposes a health endpoint, not a hardware connect API.</p></div><button className="primary" disabled>Connect to ECU (coming soon)</button></section>
           <section className="panel"><div className="panel-head"><div><h2>Connection status</h2><p>Actual server status</p></div><button className="secondary" onClick={() => void checkHealth()} disabled={checking}>Refresh</button></div><div className="detail-line"><span>Backend</span><strong>{health ? "Reachable" : "Unavailable"}</strong></div><div className="detail-line"><span>Server mode</span><strong>{health?.mode ?? "—"}</strong></div><div className="detail-line"><span>Server version</span><strong>{health?.version ?? "—"}</strong></div><div className="detail-line"><span>CAN adapter</span><strong>Disconnected</strong></div><div className="detail-line"><span>XCP session</span><strong>Not established</strong></div>{apiError && <p className="error-text">API error: {apiError}</p>}</section>
