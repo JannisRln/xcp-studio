@@ -46,6 +46,8 @@ function App() {
   const [readAddress, setReadAddress] = useState("0x1000");
   const [readCount, setReadCount] = useState(4);
   const [readResult, setReadResult] = useState("");
+  const [readBytes, setReadBytes] = useState<number[]>([]);
+  const [valueFormat, setValueFormat] = useState("u32");
   const [sessionError, setSessionError] = useState("");
   const [channel, setChannel] = useState("PCAN-USB 1");
   const [bitrate, setBitrate] = useState("500 kbit/s");
@@ -85,6 +87,7 @@ function App() {
       if (!response.ok) throw new Error(data.error ?? `HTTP ${response.status}`);
       setSessionConnected(Boolean(data.connected));
       setReadResult("");
+      setReadBytes([]);
       record(`Simulator XCP ${action}`);
     } catch (error) {
       setSessionError(error instanceof Error ? error.message : String(error));
@@ -109,6 +112,7 @@ function App() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? `HTTP ${response.status}`);
       setReadResult(`${addressText}: ${data.hex}`);
+      setReadBytes(data.bytes as number[]);
       record(`Read ${count} bytes at ${addressText} from simulated ECU`);
     } catch (error) {
       setSessionError(error instanceof Error ? error.message : String(error));
@@ -116,6 +120,23 @@ function App() {
       setSessionBusy(false);
     }
   };
+  const decodedValue = useMemo(() => {
+    const lengths: Record<string, number> = { u8: 1, i8: 1, u16: 2, i16: 2, u32: 4, i32: 4, f32: 4, f64: 8 };
+    const length = lengths[valueFormat];
+    if (!length || readBytes.length < length) return "Not enough bytes";
+    const view = new DataView(new Uint8Array(readBytes.slice(0, length)).buffer);
+    switch (valueFormat) {
+      case "u8": return String(view.getUint8(0));
+      case "i8": return String(view.getInt8(0));
+      case "u16": return String(view.getUint16(0, true));
+      case "i16": return String(view.getInt16(0, true));
+      case "u32": return String(view.getUint32(0, true));
+      case "i32": return String(view.getInt32(0, true));
+      case "f32": return String(view.getFloat32(0, true));
+      case "f64": return String(view.getFloat64(0, true));
+      default: return "Unsupported";
+    }
+  }, [readBytes, valueFormat]);
   const loadElf = async (file: File | undefined) => {
     if (!file) return;
     setElfLoading(true);
@@ -217,7 +238,7 @@ function App() {
         </section>}
         {page === "Connections" && <div className="two-column">
           <section className="panel form-panel"><div className="panel-head"><div><h2>CAN interface</h2><p>Local configuration preview</p></div></div><label className="field">Adapter<select value={channel} onChange={e => setChannel(e.target.value)}><option>PCAN-USB 1</option><option>PCAN-USB 2</option><option>Vector VN1640A</option></select></label><label className="field">Bitrate<select value={bitrate} onChange={e => setBitrate(e.target.value)}><option>125 kbit/s</option><option>250 kbit/s</option><option>500 kbit/s</option><option>1 Mbit/s</option></select></label><div className="field"><span>Command CAN ID</span><code>0x667</code></div><div className="field"><span>Response CAN ID</span><code>0x666</code></div><div className="notice"><strong>Hardware connection unavailable</strong><p>Adapter selection is local only. Connect simulator starts a simulated XCP session; hardware adapter connection is not yet supported.</p></div><div className="button-group"><button className="primary" disabled={sessionBusy || sessionConnected} onClick={() => void sessionAction("connect")}>Connect simulator</button><button className="secondary" disabled={sessionBusy || !sessionConnected} onClick={() => void sessionAction("disconnect")}>Disconnect</button></div>{sessionError && <p className="error-text">{sessionError}</p>}</section>
-          <section className="panel"><div className="panel-head"><div><h2>Connection status</h2><p>Actual server status</p></div><button className="secondary" onClick={() => void checkHealth()} disabled={checking}>Refresh</button></div><div className="detail-line"><span>Backend</span><strong>{health ? "Reachable" : "Unavailable"}</strong></div><div className="detail-line"><span>Server mode</span><strong>{health?.mode ?? "—"}</strong></div><div className="detail-line"><span>Server version</span><strong>{health?.version ?? "—"}</strong></div><div className="detail-line"><span>CAN adapter</span><strong>Hardware disconnected</strong></div><div className="detail-line"><span>Simulator XCP session</span><strong>{sessionConnected ? "Connected" : "Disconnected"}</strong></div>{apiError && <p className="error-text">API error: {apiError}</p>}<div className="read-widget"><h3>Read simulated ECU memory</h3><label className="field">Address<input className="search" value={readAddress} onChange={e => setReadAddress(e.target.value)} /></label><label className="field">Bytes<input className="search" type="number" min="1" max="4096" value={readCount} onChange={e => setReadCount(Number(e.target.value))} /></label><button className="primary" disabled={!sessionConnected || sessionBusy} onClick={() => void readMemory()}>Read memory</button>{readResult && <pre className="read-result">{readResult}</pre>}</div></section>
+          <section className="panel"><div className="panel-head"><div><h2>Connection status</h2><p>Actual server status</p></div><button className="secondary" onClick={() => void checkHealth()} disabled={checking}>Refresh</button></div><div className="detail-line"><span>Backend</span><strong>{health ? "Reachable" : "Unavailable"}</strong></div><div className="detail-line"><span>Server mode</span><strong>{health?.mode ?? "—"}</strong></div><div className="detail-line"><span>Server version</span><strong>{health?.version ?? "—"}</strong></div><div className="detail-line"><span>CAN adapter</span><strong>Hardware disconnected</strong></div><div className="detail-line"><span>Simulator XCP session</span><strong>{sessionConnected ? "Connected" : "Disconnected"}</strong></div>{apiError && <p className="error-text">API error: {apiError}</p>}<div className="read-widget"><h3>Read simulated ECU memory</h3><label className="field">Address<input className="search" value={readAddress} onChange={e => setReadAddress(e.target.value)} /></label><label className="field">Bytes<input className="search" type="number" min="1" max="4096" value={readCount} onChange={e => setReadCount(Number(e.target.value))} /></label><button className="primary" disabled={!sessionConnected || sessionBusy} onClick={() => void readMemory()}>Read memory</button>{readResult && <><pre className="read-result">{readResult}</pre><label className="field">Interpret as (little-endian)<select value={valueFormat} onChange={e => setValueFormat(e.target.value)}>{["u8", "i8", "u16", "i16", "u32", "i32", "f32", "f64"].map(type => <option key={type}>{type}</option>)}</select></label><div className="decoded-value">{decodedValue}</div></>}</div></section>
         </div>}
         {page === "Calibration" && <div className="two-column"><section className="panel"><div className="panel-head"><div><h2>Calibration variables</h2><p>ECU memory access</p></div></div><div className="placeholder-icon">⚙</div><h3>Calibration not yet available</h3><p className="muted">The XCP core supports memory read/write operations, but the server does not expose calibration endpoints yet. No values are fabricated here.</p><button className="secondary" onClick={() => setPage("Connections")}>View connection setup →</button></section><section className="panel"><div className="panel-head"><div><h2>Planned workflow</h2><p>Integration roadmap</p></div></div><div className="roadmap"><div><b>01</b><span>Connect to CAN adapter</span></div><div><b>02</b><span>Establish XCP session</span></div><div><b>03</b><span>Load A2L variable definitions</span></div><div><b>04</b><span>Read, edit and verify calibration values</span></div></div></section></div>}
         {page === "Diagnostics" && <div className="two-column"><section className="panel"><div className="panel-head"><div><h2>Backend diagnostics</h2><p>Server health endpoint</p></div><button className="secondary" onClick={() => void checkHealth()} disabled={checking}>↻ Check now</button></div><div className="detail-line"><span>Endpoint</span><code>/api/health</code></div><div className="detail-line"><span>HTTP status</span><strong>{health ? "Healthy" : "Unavailable"}</strong></div><div className="detail-line"><span>Execution mode</span><strong>{health?.mode ?? "—"}</strong></div><div className="detail-line"><span>Version</span><strong>{health?.version ?? "—"}</strong></div>{apiError && <p className="error-text">{apiError}</p>}</section><section className="panel"><div className="panel-head"><div><h2>Workspace events</h2><p>Local UI activity</p></div><button className="secondary" onClick={() => setLog([])}>Clear</button></div><div className="event-list">{log.length ? log.map((entry, i) => <div key={i} className="event"><span className="status-dot" />{entry}</div>) : <div className="empty">No events recorded.</div>}</div></section></div>}
