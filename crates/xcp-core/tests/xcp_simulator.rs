@@ -1,11 +1,14 @@
 use xcp_core::xcp::{
-    CanIds, SimulatedSlave, SimulatedTransport, XcpError, XcpMaster,
-    ERR_ACCESS_DENIED, ERR_OUT_OF_RANGE, ERR_SEQUENCE,
+    CanIds, SimulatedSlave, SimulatedTransport, XcpError, XcpMaster, ERR_ACCESS_DENIED,
+    ERR_OUT_OF_RANGE, ERR_SEQUENCE,
 };
 
 fn master() -> XcpMaster<SimulatedTransport> {
     let ids = CanIds::default();
-    XcpMaster::new(SimulatedTransport::new(SimulatedSlave::new(0x1000, 256), ids), ids)
+    XcpMaster::new(
+        SimulatedTransport::new(SimulatedSlave::new(0x1000, 256), ids),
+        ids,
+    )
 }
 
 #[test]
@@ -14,7 +17,10 @@ fn connect_and_disconnect() {
     let response = master.connect().unwrap();
     assert_eq!(response[2], 8); // max CTO
     master.disconnect().unwrap();
-    assert!(matches!(master.upload(1), Err(XcpError::Protocol(ERR_SEQUENCE))));
+    assert!(matches!(
+        master.upload(1),
+        Err(XcpError::Protocol(ERR_SEQUENCE))
+    ));
 }
 
 #[test]
@@ -41,7 +47,10 @@ fn download_and_readback_across_can_frames() {
 fn rejects_out_of_bounds_access() {
     let mut master = master();
     master.connect().unwrap();
-    assert!(matches!(master.read(0x10ff, 2), Err(XcpError::Protocol(ERR_OUT_OF_RANGE))));
+    assert!(matches!(
+        master.read(0x10ff, 2),
+        Err(XcpError::Protocol(ERR_OUT_OF_RANGE))
+    ));
 }
 
 #[test]
@@ -51,12 +60,18 @@ fn rejects_write_when_calibration_locked() {
     slave.set_writable(false);
     let mut master = XcpMaster::new(SimulatedTransport::new(slave, ids), ids);
     master.connect().unwrap();
-    assert!(matches!(master.write(0x1000, &[1]), Err(XcpError::Protocol(ERR_ACCESS_DENIED))));
+    assert!(matches!(
+        master.write(0x1000, &[1]),
+        Err(XcpError::Protocol(ERR_ACCESS_DENIED))
+    ));
 }
 
 #[test]
 fn rejects_oversized_cto_payload() {
     let mut master = master();
     master.connect().unwrap();
-    assert!(matches!(master.download(&[0; 7]), Err(XcpError::InvalidParameters)));
+    assert!(matches!(
+        master.download(&[0; 7]),
+        Err(XcpError::InvalidParameters)
+    ));
 }
