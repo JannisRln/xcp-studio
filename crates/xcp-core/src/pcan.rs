@@ -94,11 +94,7 @@ impl PcanTransport {
         bitrate: u16,
         receive_timeout: Duration,
     ) -> Result<Self, TransportError> {
-        let dll = if cfg!(target_pointer_width = "64") {
-            "PCANBasic.dll"
-        } else {
-            "PCANBasic.dll"
-        };
+        let dll = "PCANBasic.dll";
         // SAFETY: The DLL and its symbols are the documented PCAN-Basic ABI.
         let library = unsafe { libloading::Library::new(dll) }
             .map_err(|e| TransportError::Other(format!("cannot load PCAN-Basic: {e}")))?;
@@ -190,9 +186,21 @@ mod tests {
 
     #[test]
     fn validates_classic_can_frames() {
-        assert!(PcanMessage::from_frame(CanFrame { id: 0x123, data: vec![0; 9] }).is_err());
-        assert!(PcanMessage::from_frame(CanFrame { id: 0x2000_0000, data: vec![] }).is_err());
-        let msg = PcanMessage::from_frame(CanFrame { id: 0x123, data: vec![1, 2] }).unwrap();
+        assert!(PcanMessage::from_frame(CanFrame {
+            id: 0x123,
+            data: vec![0; 9],
+        })
+        .is_err());
+        assert!(PcanMessage::from_frame(CanFrame {
+            id: 0x2000_0000,
+            data: vec![],
+        })
+        .is_err());
+        let msg = PcanMessage::from_frame(CanFrame {
+            id: 0x123,
+            data: vec![1, 2],
+        })
+        .unwrap();
         assert_eq!(msg.into_frame().unwrap().unwrap().data, vec![1, 2]);
     }
 }
