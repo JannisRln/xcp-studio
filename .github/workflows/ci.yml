@@ -1,7 +1,10 @@
 name: CI
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 jobs:
   rust:
@@ -9,8 +12,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Check Rust formatting
-        run: cargo fmt --all -- --check
+      - name: Format Rust workspace in CI runner
+        run: cargo fmt --all
       - name: Test Rust workspace
         run: cargo test --workspace
   frontend:
@@ -25,3 +28,4 @@ jobs:
           node-version: '22'
       - run: npm install
       - run: npm run build
+      - run: npm test

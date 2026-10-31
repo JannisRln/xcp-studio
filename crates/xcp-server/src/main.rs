@@ -115,7 +115,10 @@ async fn session_connect(
         master.connect().map_err(session_error)?;
         *guard = Some(master);
     }
-    Ok(Json(SessionStatus { connected: true, transport: "simulation" }))
+    Ok(Json(SessionStatus {
+        connected: true,
+        transport: "simulation",
+    }))
 }
 
 async fn session_disconnect(
@@ -126,7 +129,10 @@ async fn session_disconnect(
         master.disconnect().map_err(session_error)?;
     }
     *guard = None;
-    Ok(Json(SessionStatus { connected: false, transport: "simulation" }))
+    Ok(Json(SessionStatus {
+        connected: false,
+        transport: "simulation",
+    }))
 }
 
 fn session_error(error: impl std::fmt::Display) -> (StatusCode, Json<ApiError>) {
