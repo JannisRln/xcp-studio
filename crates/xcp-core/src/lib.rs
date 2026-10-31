@@ -40,7 +40,10 @@ mod tests {
     #[test]
     fn loopback_roundtrip() {
         let mut bus = LoopbackTransport::default();
-        let frame = CanFrame { id: 0x123, data: vec![0xff, 0x00] };
+        let frame = CanFrame {
+            id: 0x123,
+            data: vec![0xff, 0x00],
+        };
         bus.send(frame.clone()).unwrap();
         assert_eq!(bus.receive().unwrap(), Some(frame));
     }
