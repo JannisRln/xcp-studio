@@ -1,5 +1,10 @@
-use axum::{extract::DefaultBodyLimit, http::StatusCode, routing::{get, post}, Json, Router};
-use serde::{Deserialize, Serialize};
+use axum::{
+    extract::DefaultBodyLimit,
+    http::StatusCode,
+    routing::{get, post},
+    Json, Router,
+};
+use serde::Serialize;
 
 #[derive(Serialize)]
 struct Health {
