@@ -13,6 +13,7 @@ Install Rust via [rustup](https://rustup.rs/); `rust-toolchain.toml` installs th
 Enable the repository's pre-commit formatting check once per local clone:
 
 ```sh
+chmod +x .githooks/pre-commit  # Git Bash, macOS or Linux; needed if the file is not executable
 git config core.hooksPath .githooks
 ```
 
