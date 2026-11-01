@@ -1,11 +1,11 @@
 ---
 id: T-0004
 title: Serialized XCP session and robust typed read/write
-status: ready
+status: in-progress
 priority: P0
 area: xcp-core
-owner: unassigned
-branch: none
+owner: chatgpt-t0004-session-agent
+branch: feature/T-0004-deadlines-recovery
 github_issue: 7
 depends_on: []
 requirements: [XCP-001, XCP-002, XCP-003, XCP-004, XCP-005, XCP-006, XCP-007, XCP-009]
@@ -56,6 +56,15 @@ Existing XCP master supports a scoped CTO subset and the server previously used 
 - Linked GitHub issue: [#7](https://github.com/JannisRln/xcp-studio/issues/7).
 - Changes to shared interfaces require contract-first coordination and an ADR if architecture changes.
 - Agent must claim ownership in this ticket and update INDEX.md before overlapping code edits.
+
+## Current hardening phase (branch: feature/T-0004-deadlines-recovery)
+
+- Scope: bounded actor queue, end-to-end command deadlines (including queued time), deadline-aware classic CAN response receiving, and explicit fault/recovery handling.
+- Recovery policy: no automatic reconnect or retry of writes. After NoResponse, malformed/late CTO, sequence error, or transport failure the worker rejects I/O until explicit CONNECT; pending receive frames are drained best-effort before reconnect.
+- Added deterministic mock/Simulator tests in `crates/xcp-core/tests/session_faults.rs` for multi-frame concurrent reads/writes, queued request timeout, negative XCP responses, stale reply drain, transport disconnect, incompatible connect and explicit reconnect.
+- Scope limits: no shared REST/WS DTO, frontend chart or acquisition-service changes; no PCAN/Vector hardware bench evidence; arbitrary blocking third-party transports still require their own bounded receive implementation.
+- Command state transitions and protocol limitations: [XCP session transition matrix](../xcp-session-state.md).
+- CI evidence and remaining checkboxes will be updated only after current-head verification.
 
 ## Evidence and completion
 
