@@ -1,5 +1,3 @@
-# T-0010 — Versioned project files and workspace restoration
-
 ---
 id: T-0010
 title: Versioned project files and workspace restoration
@@ -12,6 +10,8 @@ github_issue: 13
 depends_on: [T-0002, T-0012]
 requirements: [UI-006, PROJ-001, PROJ-002, PROJ-003, PROJ-004, PROJ-005]
 ---
+
+# T-0010 — Versioned project files and workspace restoration
 
 ## Context / desired behavior
 
