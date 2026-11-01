@@ -174,14 +174,14 @@ struct SnapshotRequest {
     signals: Vec<SnapshotSignalRequest>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct SnapshotSignalRequest {
     name: String,
     address: u32,
     value_type: SnapshotValueType,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 enum SnapshotValueType {
     U8,
