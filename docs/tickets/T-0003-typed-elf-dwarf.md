@@ -1,5 +1,3 @@
-# T-0003 — Typed ELF/DWARF metadata and location provenance
-
 ---
 id: T-0003
 title: Typed ELF/DWARF metadata and location provenance
@@ -12,6 +10,8 @@ github_issue: 6
 depends_on: []
 requirements: [ECU-001, ECU-002, ECU-003, ECU-004, ECU-005, ECU-006, ECU-008, ECU-010]
 ---
+
+# T-0003 — Typed ELF/DWARF metadata and location provenance
 
 ## Context / desired behavior
 
