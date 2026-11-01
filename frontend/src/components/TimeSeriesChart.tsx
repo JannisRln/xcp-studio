@@ -1,6 +1,15 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import uPlot from "uplot";
 import type { MeasurementFrame, SignalDefinition } from "../core/api";
+
+/** Retained testable selector for a single signal series. */
+export function chartPoints(frames: MeasurementFrame[], signal: SignalDefinition) {
+  return frames.flatMap(frame => {
+    const sample = frame.samples.find(item => item.name === signal.name && item.address === signal.address);
+    return sample && Number.isFinite(sample.value)
+      ? [{ t: frame.timestamp_ms, y: sample.value }] : [];
+  });
+}
 import { chartViewport, groupSignalsByUnit } from "./chartMath";
 import { alignedPlotData, cursorValue } from "./plotData";
 
@@ -91,7 +100,7 @@ function ChartLane({ unit, signals, frames, viewport, markers, onMeasure }: Lane
     plot.current = instance;
     const onClick = () => {
       const index = instance.cursor.idx;
-      if (index !== null && index >= 0 && index < instance.data[0].length) {
+      if (typeof index === "number" && index >= 0 && index < instance.data[0].length) {
         const value = instance.data[0][index];
         if (typeof value === "number") onMeasureRef.current(value);
       }
