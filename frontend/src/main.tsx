@@ -3,6 +3,9 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App";
 import "./dashboard.css";
+import "uplot/dist/uPlot.min.css";
+import "react-grid-layout/css/styles.css";
+import "react-resizable/css/styles.css";
 
 // Only the GitHub Pages build provides synthetic, browser-local API/WS responses.
 if (import.meta.env.MODE === "pages") installBrowserDemo();

@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import type { SignalDefinition } from "../../core/api";
 import { acquisitionCsv, downloadText } from "../../core/export";
 import { formatAddress, palette } from "../../core/signals";
-import { TimeSeriesChart } from "../../components/TimeSeriesChart";
+import { MemoTimeSeriesChart } from "../../components/TimeSeriesChart";
+import { LiveWindows } from "../../components/LiveWindows";
 import { useAcquisition } from "./useAcquisition";
 
 type Props = {
@@ -134,9 +135,10 @@ export function MeasurementsPage({
           Retry connection now</button>}
     </div>}
 
-    <TimeSeriesChart frames={acquisition.frames} signals={signalSet}
-      title={acquisition.paused ? "Live chart · paused" : "Live signal trends"} />
-
+    <LiveWindows
+      chart={<MemoTimeSeriesChart frames={acquisition.frames} signals={signalSet}
+        title={acquisition.paused ? "Live chart · paused" : "Live signal trends"} />}
+      values={<>
     <section className="panel" aria-label="Latest ECU values">
       <div className="panel-heading">
         <div><h2>Live signal values</h2>
@@ -166,6 +168,9 @@ export function MeasurementsPage({
         </div>}
       </div>
     </section>
+
+      </>}
+    />
 
     <section className="panel signal-browser" aria-label="Live signal configuration">
       <div className="panel-heading">
