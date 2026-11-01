@@ -431,7 +431,7 @@ async fn send_events(
 
         }
     }
-    let _ = socket.close().await;
+    let _ = socket.send(Message::Close(None)).await;
 }
 
 #[cfg(test)]
