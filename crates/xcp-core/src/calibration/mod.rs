@@ -412,6 +412,7 @@ pub enum DispatchEvidence {
 pub enum NotSentReason {
     PolicyDenied,
     Disconnected,
+    Timeout,
     Expired,
     Cancelled,
 }
@@ -632,6 +633,57 @@ mod tests {
         assert_eq!(done.finish(NOW + 2, DispatchEvidence::Sent(SentEvidence::Observed(readback))).outcome(), AuditOutcome::ReadbackMismatch);
         assert_eq!(encode(&RawValue::Float32(f32::NAN), RawType::F32, ByteOrder::Little), Err(CalibrationError::OutOfRange));
         assert_eq!(ConfirmationToken::from_trusted_random(0), Err(CalibrationError::InvalidToken));
+    }
+
+    #[test]
+    fn physical_limits_and_invalid_conversion_are_rejected() {
+        let mut p = parameter();
+        p.conversion = Conversion::Linear {
+            scale: 0.5,
+            offset: 0.0,
+            physical_min: 500.0,
+            physical_max: 1000.0,
+        };
+        assert_eq!(
+            Preview::prepare(
+                p.clone(),
+                snapshot(2000, 12),
+                RawValue::Unsigned(2200),
+                token(),
+                NOW,
+                NOW + 1,
+            )
+            .unwrap_err(),
+            CalibrationError::OutOfRange
+        );
+        p.conversion = Conversion::Linear {
+            scale: f64::NAN,
+            offset: 0.0,
+            physical_min: 0.0,
+            physical_max: 4000.0,
+        };
+        assert_eq!(
+            Preview::prepare(
+                p,
+                snapshot(2000, 12),
+                RawValue::Unsigned(2200),
+                token(),
+                NOW,
+                NOW + 1,
+            )
+            .unwrap_err(),
+            CalibrationError::InvalidConversion
+        );
+    }
+
+    #[test]
+    fn pre_send_timeout_is_distinct_from_unknown_after_send() {
+        let result = preview()
+            .confirm(token(), NOW + 1, &snapshot(2000, 12))
+            .unwrap()
+            .finish(NOW + 2, DispatchEvidence::NotSent(NotSentReason::Timeout));
+        assert_eq!(result.outcome(), AuditOutcome::NotSent(NotSentReason::Timeout));
+        assert_eq!(result.readback(), None);
     }
 
     #[test]
