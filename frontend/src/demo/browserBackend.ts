@@ -33,6 +33,13 @@ function failure(status: number, code: string, message: string): Response {
   } }, status);
 }
 
+function demoCloseEvent(code: number, reason = ""): CloseEvent {
+  // Node/Vitest lacks the browser-specific CloseEvent constructor.
+  if (typeof CloseEvent === "function")
+    return new CloseEvent("close", { code, reason, wasClean: true });
+  return Object.assign(new Event("close"), { code, reason, wasClean: true }) as CloseEvent;
+}
+
 type DemoPacket = { type: string; schema_version: 1; acquisition_id: string;
   [key: string]: unknown };
 type Run = {
@@ -75,7 +82,7 @@ class DemoSocket extends EventTarget {
         this.readyState = 3;
         this.onerror?.call(this as unknown as WebSocket, new Event("error"));
         this.onclose?.call(this as unknown as WebSocket,
-          new CloseEvent("close", { code: 1008 }));
+          demoCloseEvent(1008));
         return;
       }
       this.readyState = 1;
