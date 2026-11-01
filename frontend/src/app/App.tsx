@@ -28,6 +28,7 @@ const descriptions: Record<Page, string> = {
 };
 
 export function App() {
+  const browserDemo = import.meta.env.VITE_DEMO === "1";
   const [page, setPage] = useState<Page>("Measurements");
   const [health, setHealth] = useState<Health | null>(null);
   const [checking, setChecking] = useState(true);
@@ -106,7 +107,7 @@ export function App() {
         </button>)}</nav>
       <div className="sidebar-footer"><div><span className={connected ? "connection-light on" : "connection-light"} />
         <strong>{connected ? "XCP connected" : "XCP disconnected"}</strong></div>
-        <p>Simulation mode · v0.1</p></div>
+        <p>{browserDemo ? "Browser demo · no ECU / CAN hardware" : "Simulation mode · v0.1"}</p></div>
     </aside>
     <div className="studio-main">
       <header className="studio-topbar">
@@ -119,9 +120,13 @@ export function App() {
           <span className="user-monogram">XS</span></div>
       </header>
       <main className="studio-content">
+        {browserDemo && <div className="demo-notice" role="status">
+          <strong>BROWSER DEMO — SYNTHETIC VALUES</strong>
+          <span>GitHub Pages runs an in-browser simulator only. No Rust server, CAN bus or real ECU is connected; demo data resets on reload.</span>
+        </div>}
         <div className="page-heading"><div><div className="eyebrow">XCP STUDIO / {page.toUpperCase()}</div>
           <h1 ref={headingRef} tabIndex={-1}>{page === "Measurements" ? "Live View" : page === "Symbols" ? "Symbol Browser" : page}</h1><p>{descriptions[page]}</p></div>
-          <span className="mode-badge">SIMULATION MODE</span></div>
+          <span className="mode-badge">{browserDemo ? "BROWSER DEMO / NO ECU" : "SIMULATION MODE"}</span></div>
         {error && <div className="error-banner" role="alert">{error} <button type="button" className="button small" onClick={() => void refresh()}>Retry API</button></div>}
         <AppErrorBoundary key={page} onRecover={() => void refresh()}>
         {page === "Overview" && <OverviewPage health={health} connected={connected} signals={signals} onNavigate={navigate} />}
