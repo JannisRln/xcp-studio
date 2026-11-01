@@ -680,6 +680,10 @@ mod tests {
         assert_eq!(sa, sb);
         assert_eq!(samples[0].value, 1850.0);
         assert_eq!(samples[1].value, 88.5);
+        assert!(matches!(samples[0].quality, Some(SampleQuality::Valid)));
+        assert!(matches!(samples[0].address_origin, Some(AddressOrigin::Manual)));
+        assert!(matches!(samples[0].value_type.as_ref(), Some(SnapshotValueType::U32)));
+        assert!(samples.iter().all(|sample| sample.validate().is_ok()));
         assert_eq!(run.status().subscriber_count, 2);
         assert_eq!(run.status().sampling_mode, "polling");
         run.stop();
