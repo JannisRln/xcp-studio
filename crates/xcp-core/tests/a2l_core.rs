@@ -129,3 +129,20 @@ fn allows_no_compu_method_only_as_identity() {
     speed.conversion_name = "missing_conversion".into();
     assert!(matches!(m.raw_to_physical(&speed, 100.0), Err(A2lError::MissingConversion(_))));
 }
+
+#[test]
+fn preserves_a2ml_validated_if_data_without_enabling_xcp_settings() {
+    let parsed = parse_a2l(include_str!("fixtures/t0008-a2ml.a2l")).unwrap();
+    assert_eq!(parsed[0].if_data.len(), 1);
+    assert_eq!(parsed[0].if_data[0].scope, "MODULE");
+    assert!(parsed[0].if_data[0].valid);
+    assert!(parsed[0].if_data[0].decoded.is_some());
+    // This is a generic A2ML value; no XCP address or permissions result.
+    assert!(parsed[0].objects.is_empty());
+}
+
+#[test]
+fn rejects_external_includes_before_parsing_untrusted_input() {
+    let text = "ASAP2_VERSION 1 71 /include \"local.a2l\"";
+    assert!(matches!(parse_a2l(text), Err(A2lError::Parse(_))));
+}
