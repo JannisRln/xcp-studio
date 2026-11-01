@@ -1,11 +1,11 @@
 ---
 id: T-0006
 title: Real measurement workspace, charts and CSV accuracy
-status: in-progress
+status: blocked
 priority: P0
 area: frontend-measurements
-owner: assistant-measurement-agent
-branch: feat/T-0006-shared-acquisition-ui-main
+owner: unassigned
+branch: none
 github_issue: 9
 depends_on: [T-0002, T-0005]
 requirements: [MEAS-003, MEAS-008, MEAS-009, UI-005]
@@ -15,13 +15,13 @@ requirements: [MEAS-003, MEAS-008, MEAS-009, UI-005]
 
 ## Context / desired behavior
 
-The modular dashboard and browser chart/CSV baseline are merged. This narrowly scoped UI/contract PR consumes the **frozen v1 acquisition contract in PR #25**; merge it only after PR #25 is green and merged. T-0002 remains partially open, but the measurement component boundary already exists, making this client integration independently reviewable.
+The modular dashboard and browser chart/CSV baseline are merged. Merged [PR #27](https://github.com/JannisRln/xcp-studio/pull/27) consumes the v1 acquisition contract from merged PR #25. Merged [PR #28](https://github.com/JannisRln/xcp-studio/pull/28) adds chart zoom/pan, unit-aware axes, cursor and bounded spike-preserving decimation. T-0002 remains partially open, but the measurement component boundary already exists, making this client integration independently reviewable.
 
 **Desired outcome:** Real measurement workspace, charts and CSV accuracy. Implement according to [product specification](../product-specification.md), [architecture](../architecture.md) and [API contract](../api-contract.md), where applicable.
 
 ## Scope
 
-- [ ] Build reusable time-series chart with correct time axis, legend, zoom/pan, cursor and per-unit scale policy.
+- [x] Build reusable time-series chart with time axis, legend, zoom/pan, cursor, per-unit axes and extrema-preserving decimation.
 - [ ] Provide a signal table with raw/physical values, quality, type, unit and timestamp.
 - [x] Implement frontend visualization pause, backend stop, reattach after page navigation/reload, and subscriber gap/drop counters. Full gap rendering on the plotted time axis remains future work.
 - [x] Export actual received backend samples with acquisition ID, sequence, wall/monotonic milliseconds and subscriber drop count; physical unit/quality conversion remains future work.
@@ -59,7 +59,7 @@ The modular dashboard and browser chart/CSV baseline are merged. This narrowly s
 
 ## Evidence and completion
 
-- Implementation PR: shared acquisition frontend consumer; depends on backend PR #25.
-- CI workflow/head SHA: pending.
-- Test/fixture evidence: pending.
-- Limitations: CSV is a bounded browser preview, not complete backend recording; missing client samples can occur after reconnect, no replay; chart still has one value axis and lacks per-unit scaling/zoom. T-0006 remains in progress, T-0015 records durably.
+- Implementation PRs: [#27](https://github.com/JannisRln/xcp-studio/pull/27) shared backend acquisition, pause/reattach and CSV; [#28](https://github.com/JannisRln/xcp-studio/pull/28) interactive chart and unit axes; both merged.
+- CI: [#115](https://github.com/JannisRln/xcp-studio/actions/runs/41291904365) and [#117](https://github.com/JannisRln/xcp-studio/actions/runs/41292351637), all three jobs green before merge.
+- Tests: acquisitionV1 contract parsing, invalid/out-of-range sample rejection, UI frame/csv metadata, 2,000-frame buffer, chart zoom/pan axes and extrema under 10k-point fixture. **No complete browser/server E2E yet.**
+- Limitations: CSV is a bounded browser preview, not complete backend recording; missing client samples can occur after reconnect, no replay; chart now groups per unit with zoom/pan/cursor, but backend DAQ, per-signal quality conversion, replay and full browser E2E remain open. T-0006 remains in progress, T-0015 records durably.
