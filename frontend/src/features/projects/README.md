@@ -55,8 +55,8 @@ Use `importProject(json, observedFiles?)`, `importProjectFile(file, observedFile
 The result includes structured warnings and `blockedSignalIds`. If a referenced
 ELF/A2L is missing or its kind/SHA-256/size differs, **every dependent signal
 is blocked pending manual reconciliation**; a matching basename is insufficient.
-Passing no observed files means identities have **not** been checked, not that
-file-backed signals have been authorized for ECU reads. The integration layer
+Passing no observed files emits **UNVERIFIED_ECU_FILE** warnings and blocks all
+file-backed signals. It does not authorize reads until identity checks succeed. The integration layer
 must treat all imported file-backed runtime locations as unresolved until
 verified by the authoritative backend/session. Never use project import as
 permission to issue ECU reads or calibration writes.
