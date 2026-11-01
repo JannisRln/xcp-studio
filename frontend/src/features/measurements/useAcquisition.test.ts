@@ -1,18 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { streamEndpoint, validateFrame } from "./useAcquisition";
+import { appendFrame, eventFrame, MAX_BUFFER } from "./useAcquisition";
+import type { MeasurementFrame } from "../../core/api";
+import { parseAcquisitionEvent } from "../../core/acquisitionV1";
+import eventFixture from "../../../../contracts/v1/acquisition-sample.json";
 
-describe("acquisition protocol", () => {
-  it("builds secure and insecure WebSocket URLs", () => {
-    expect(streamEndpoint("https:", "ecu.local")).toBe("wss://ecu.local/api/xcp/stream");
-    expect(streamEndpoint("http:", "localhost:5173")).toBe("ws://localhost:5173/api/xcp/stream");
+describe("shared acquisition buffer and timebase", () => {
+  it("maps a real backend sample event without fabricating values", () => {
+    const event = parseAcquisitionEvent(eventFixture);
+    expect(event.type).toBe("samples");
+    if (event.type !== "samples") return;
+    expect(eventFrame(event)).toEqual({
+      timestamp_ms: 1761980000000,
+      samples: [
+        { name: "Engine speed", address: 4096, value: 1850 },
+        { name: "Coolant", address: 4100, value: 88.5 },
+      ],
+    });
   });
-  it("validates actual measurement frames", () => {
-    expect(validateFrame({ timestamp_ms: 123, samples: [{ name: "rpm", address: 4096, value: 1850 }] }))
-      .toMatchObject({ timestamp_ms: 123 });
-  });
-  it("rejects invalid, malformed and server error messages", () => {
-    for (const payload of [null, {}, { timestamp_ms: "now", samples: [] },
-      { timestamp_ms: 1, samples: [{ name: "rpm", address: 4096, value: "1850" }] },
-      { error: "XCP session not connected" }]) expect(() => validateFrame(payload)).toThrow();
+
+  it("bounds the visualization buffer even after thousands of frames", () => {
+    let frames: MeasurementFrame[] = [];
+    for (let t = 0; t < MAX_BUFFER + 150; t++)
+      frames = appendFrame(frames, { timestamp_ms: t, samples: [] });
+    expect(frames).toHaveLength(MAX_BUFFER);
+    expect(frames[0].timestamp_ms).toBe(150);
+    expect(frames.at(-1)?.timestamp_ms).toBe(MAX_BUFFER + 149);
   });
 });
