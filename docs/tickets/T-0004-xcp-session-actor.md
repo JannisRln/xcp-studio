@@ -1,7 +1,7 @@
 ---
 id: T-0004
 title: Serialized XCP session and robust typed read/write
-status: in-progress
+status: review
 priority: P0
 area: xcp-core
 owner: chatgpt-t0004-session-agent
@@ -64,7 +64,8 @@ Existing XCP master supports a scoped CTO subset and the server previously used 
 - Added deterministic mock/Simulator tests in `crates/xcp-core/tests/session_faults.rs` for multi-frame concurrent reads/writes, queued request timeout, negative XCP responses, stale reply drain, transport disconnect, incompatible connect and explicit reconnect.
 - Scope limits: no shared REST/WS DTO, frontend chart or acquisition-service changes; no PCAN/Vector hardware bench evidence; arbitrary blocking third-party transports still require their own bounded receive implementation.
 - Command state transitions and protocol limitations: [XCP session transition matrix](../xcp-session-state.md).
-- CI evidence and remaining checkboxes will be updated only after current-head verification.
+- Review PR: [#40](https://github.com/JannisRln/xcp-studio/pull/40) (draft). Windows CI on current head is the verification gate; remaining acceptance is pending, not marked complete. See PR checks for results.
+- Current review-phase scope deliberately excludes fully typed multi-endian I/O, address extensions, production HIL and cancellation of arbitrary blocked third-party driver calls.
 
 ## Evidence and completion
 
