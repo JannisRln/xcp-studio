@@ -5,6 +5,7 @@
 //! WebSocket client; subscribers cannot increase CAN/XCP request frequency.
 
 use crate::api::v1::{error, ApiFailure};
+use crate::security;
 use crate::{
     session_snapshot, Session, SnapshotRequest, SnapshotSample, SnapshotSignalRequest,
 };
@@ -28,7 +29,7 @@ use std::{
 };
 use tokio::{
     sync::{broadcast, watch},
-    time::{interval, Duration, Instant, MissedTickBehavior},
+    time::{interval, timeout, Duration, Instant, MissedTickBehavior},
 };
 use xcp_core::session::SessionState;
 #[cfg(test)]
@@ -390,8 +391,8 @@ pub async fn subscribe(
 ) -> Result<impl IntoResponse, ApiFailure> {
     let run = service.current(&id)?;
     let (guard, receiver) = run.subscribe()?;
-    Ok(ws.max_message_size(16 * 1024)
-        .max_frame_size(16 * 1024)
+    Ok(ws.max_message_size(security::MAX_WS_MESSAGE)
+        .max_frame_size(security::MAX_WS_MESSAGE)
         .on_upgrade(move |socket| send_events(socket, guard, receiver)))
 }
 
@@ -406,8 +407,9 @@ async fn send_events(
         tokio::select! {
             incoming = socket.recv() => {
                 match incoming {
-                    Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
-                    _ => {}
+                    Some(Ok(Message::Ping(_))) | Some(Ok(Message::Pong(_))) => {},
+                    // Subscribers are receive-only; reject arbitrary client payloads.
+                    _ => break,
                 }
             }
             received = receiver.recv() => {
@@ -425,7 +427,13 @@ async fn send_events(
                 };
                 let terminal = matches!(event, AcquisitionEvent::Status { .. });
                 let Ok(payload) = serde_json::to_string(&event) else { break };
-                if socket.send(Message::Text(payload.into())).await.is_err() {
+                if !matches!(
+                    timeout(
+                        security::WS_SEND_TIMEOUT,
+                        socket.send(Message::Text(payload.into())),
+                    ).await,
+                    Ok(Ok(()))
+                ) {
                     break;
                 }
                 if terminal { break; }
@@ -433,7 +441,10 @@ async fn send_events(
 
         }
     }
-    let _ = socket.send(Message::Close(None)).await;
+    let _ = timeout(
+        security::WS_SEND_TIMEOUT,
+        socket.send(Message::Close(None)),
+    ).await;
 }
 
 #[cfg(test)]
