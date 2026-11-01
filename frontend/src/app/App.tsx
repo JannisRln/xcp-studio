@@ -76,7 +76,7 @@ export function App() {
         <button key={item.page} className={page === item.page ? "sidebar-link active" : "sidebar-link"}
           onClick={() => navigate(item.page)} title={item.description} aria-current={page === item.page ? "page" : undefined}>
           <span className="sidebar-icon">{item.icon}</span><span>{item.page}</span>
-          {item.page === "Measurements" && <small>{signals.length}</small>
+          {item.page === "Measurements" && <small>{signals.length}</small>}
         </button>)}</nav>
       <div className="sidebar-footer"><div><span className={connected ? "connection-light on" : "connection-light"} />
         <strong>{connected ? "XCP connected" : "XCP disconnected"}</strong></div>
