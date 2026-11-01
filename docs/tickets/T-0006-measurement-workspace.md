@@ -5,7 +5,7 @@ status: in-progress
 priority: P0
 area: frontend-measurements
 owner: assistant-live-view
-branch: feat/T-0006-live-view-priority
+branch: feat/T-0006-canvas-measurement-tools
 github_issue: 9
 depends_on: [T-0002, T-0005]
 requirements: [MEAS-003, MEAS-008, MEAS-009, UI-005]
@@ -64,3 +64,10 @@ requirements: [MEAS-003, MEAS-008, MEAS-009, UI-005]
 - CI: [#115](https://github.com/JannisRln/xcp-studio/actions/runs/41291904365) and [#117](https://github.com/JannisRln/xcp-studio/actions/runs/41292351637), all three jobs green before merge.
 - Tests: acquisitionV1 contract parsing, invalid/out-of-range sample rejection, UI frame/csv metadata, 2,000-frame buffer, chart zoom/pan axes and extrema under 10k-point fixture. **No complete browser/server E2E yet.**
 - Limitations: CSV is an optional bounded browser preview, not complete backend recording; missing client samples can occur after reconnect, no replay; chart now groups per unit with zoom/pan/cursor, but backend DAQ, per-signal quality conversion, replay and full browser E2E remain open. T-0006 remains in progress, T-0015 records durably.
+
+
+## Canvas performance and measurement cursor phase
+
+The Canvas measurement-scope PR replaces SVG polylines with a device-pixel-ratio-aware Canvas 2D renderer. A fixed-capacity (32,768-frame) `Float64Array` ring holds time and signal values, with pixel-bucket extrema preserving narrow peaks. It adds A/B cursors, delta time, inverse delta time, per-signal delta values, wheel zoom and Shift+drag panning. Acquisition remains independent from display rendering.
+
+**Performance limits:** this is an incremental architecture step, not a 10 kHz / 60 FPS certification. The upstream `useAcquisition` still copies a bounded React preview on every received batch; a future follow-up should stream directly into a Worker-owned buffer with rAF-only chart notifications, and benchmark 10/50/100 signals on Windows. uPlot/React Grid Layout are candidates, but this phase uses dependency-free Canvas so the existing reproducible lockfile and CI remain intact. The browser E2E test must be adapted from SVG `polyline` inspection to Canvas pixel or buffer assertions before merging its branch.
