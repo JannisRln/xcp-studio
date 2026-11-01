@@ -8,7 +8,14 @@ export type ReadResult = { address: number; bytes: number[]; hex: string };
 export type SignalType = "u8" | "i8" | "u16" | "i16" | "u32" | "i32" | "f32" | "f64";
 export type SignalDefinition = { id: string; name: string; address: number; value_type: SignalType; unit: string; color: string };
 export type MeasurementSample = { name: string; address: number; value: number };
-export type MeasurementFrame = { timestamp_ms: number; samples: MeasurementSample[] };
+export type MeasurementFrame = {
+  timestamp_ms: number;
+  samples: MeasurementSample[];
+  acquisition_id?: string;
+  sequence?: number;
+  monotonic_elapsed_ms?: number;
+  dropped_since_previous?: number;
+};
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) { super(message); this.name = "ApiError"; }

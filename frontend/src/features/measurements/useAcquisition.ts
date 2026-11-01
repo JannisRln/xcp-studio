@@ -1,78 +1,213 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MeasurementFrame, SignalDefinition } from "../../core/api";
+import {
+  acquisitionApi, acquisitionWsUrl, parseAcquisitionEvent,
+  type AcquisitionSamplesEvent, type AcquisitionStatus,
+} from "../../core/acquisitionV1";
+import { VersionedApiError } from "../../core/apiV1";
 
 export type AcquisitionState = "idle" | "connecting" | "streaming" | "error";
-const MAX_BUFFER = 2000;
+export const MAX_BUFFER = 2000;
 
-export function streamEndpoint(protocol: string, host: string): string {
-  return `${protocol === "https:" ? "wss:" : "ws:"}//${host}/api/xcp/stream`;
+/** Keep rendering/export preview bounded; persistent capture is a backend concern. */
+export function appendFrame(previous: MeasurementFrame[], frame: MeasurementFrame): MeasurementFrame[] {
+  return [...previous.slice(-(MAX_BUFFER - 1)), frame];
 }
 
-export function validateFrame(value: unknown): MeasurementFrame {
-  if (!value || typeof value !== "object") throw new Error("Malformed stream message");
-  const frame = value as Partial<MeasurementFrame> & { error?: string };
-  if (typeof frame.error === "string") throw new Error(frame.error);
-  if (typeof frame.timestamp_ms !== "number" || !Number.isFinite(frame.timestamp_ms) ||
-      !Array.isArray(frame.samples) || !frame.samples.every(sample =>
-        typeof sample.name === "string" && typeof sample.address === "number" &&
-        typeof sample.value === "number" && Number.isFinite(sample.value)))
-    throw new Error("Invalid measurement frame");
-  return frame as MeasurementFrame;
+export function eventFrame(event: AcquisitionSamplesEvent): MeasurementFrame {
+  return {
+    timestamp_ms: event.timestamp_ms, samples: event.samples,
+    acquisition_id: event.acquisition_id, sequence: event.sequence,
+    monotonic_elapsed_ms: event.monotonic_elapsed_ms,
+    dropped_since_previous: event.dropped_since_previous,
+  };
+}
+
+function describeError(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
 }
 
 export function useAcquisition(connected: boolean) {
   const [state, setState] = useState<AcquisitionState>("idle");
+  const [status, setStatus] = useState<AcquisitionStatus | null>(null);
   const [frames, setFrames] = useState<MeasurementFrame[]>([]);
+  const [latest, setLatest] = useState<MeasurementFrame | null>(null);
   const [error, setError] = useState("");
   const [received, setReceived] = useState(0);
+  const [dropped, setDropped] = useState(0);
+  const [paused, setPaused] = useState(false);
   const socket = useRef<WebSocket | null>(null);
-  const lastTime = useRef(0);
+  const mounted = useRef(false);
+  const pausedRef = useRef(false);
+  const activeId = useRef<string | null>(null);
+  const pendingDrops = useRef(0);
 
-  const stop = useCallback(() => {
-    socket.current?.close();
+  const detach = useCallback(() => {
+    const current = socket.current;
     socket.current = null;
-    setState("idle");
+    current?.close();
   }, []);
 
-  const start = useCallback((signals: SignalDefinition[], intervalMs: number) => {
-    stop();
-    setError("");
-    if (!connected) { setError("Connect the XCP simulator first"); setState("error"); return; }
-    if (signals.length < 1 || signals.length > 64) { setError("Select 1–64 signals"); setState("error"); return; }
-    if (!Number.isInteger(intervalMs) || intervalMs < 20 || intervalMs > 10000) {
-      setError("Interval must be between 20 and 10000 ms"); setState("error"); return;
+  const attach = useCallback((acquisition: AcquisitionStatus) => {
+    if (acquisition.state !== "running") {
+      setStatus(acquisition);
+      setState("idle");
+      return;
     }
-    const ws = new WebSocket(streamEndpoint(window.location.protocol, window.location.host));
-    socket.current = ws;
+    detach();
+    activeId.current = acquisition.acquisition_id;
+    setStatus(acquisition);
+    setError("");
     setState("connecting");
+    const ws = new WebSocket(acquisitionWsUrl(
+      window.location.protocol, window.location.host, acquisition.acquisition_id,
+    ));
+    socket.current = ws;
     ws.onopen = () => {
-      ws.send(JSON.stringify({ interval_ms: intervalMs, signals: signals.map(({ name, address, value_type }) =>
-        ({ name, address, value_type })) }));
-      setState("streaming");
+      if (socket.current === ws) setState("streaming");
     };
-    ws.onmessage = event => {
+    ws.onmessage = (message) => {
+      if (socket.current !== ws) return;
       try {
-        const frame = validateFrame(JSON.parse(String(event.data)) as unknown);
-        lastTime.current = frame.timestamp_ms;
-        setFrames(previous => [...previous.slice(-(MAX_BUFFER - 1)), frame]);
-        setReceived(count => count + 1);
+        const event = parseAcquisitionEvent(JSON.parse(String(message.data)) as unknown);
+        if (event.acquisition_id !== acquisition.acquisition_id)
+          throw new Error("Acquisition ID mismatch in WebSocket message");
+        if (event.type === "samples") {
+          const frame = eventFrame(event);
+          frame.dropped_since_previous = (frame.dropped_since_previous ?? 0) + pendingDrops.current;
+          pendingDrops.current = 0;
+          setLatest(frame);
+          setReceived(count => count + 1);
+          setStatus(previous => previous?.acquisition_id === event.acquisition_id
+            ? { ...previous, sequence: event.sequence } : previous);
+          if (!pausedRef.current) setFrames(previous => appendFrame(previous, frame));
+        } else if (event.type === "gap") {
+          pendingDrops.current += event.dropped;
+          setDropped(count => count + event.dropped);
+        } else {
+          setStatus(previous => previous?.acquisition_id === event.acquisition_id
+            ? { ...previous, state: event.state, error: event.state === "failed" ? event.reason : null }
+            : previous);
+          setState(event.state === "failed" ? "error" : "idle");
+          if (event.state === "failed")
+            setError("XCP acquisition stopped due to a backend read error");
+          detach();
+        }
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : String(cause));
+        setError(describeError(cause));
         setState("error");
-        ws.close();
+        detach();
       }
     };
-    ws.onerror = () => { setError("WebSocket transport error"); setState("error"); };
-    ws.onclose = () => {
+    ws.onerror = () => {
       if (socket.current === ws) {
-        socket.current = null;
-        setState(current => current === "error" ? current : "idle");
+        setError("WebSocket transport error; backend acquisition may still be active");
+        setState("error");
       }
     };
-  }, [connected, stop]);
+    ws.onclose = () => {
+      if (socket.current !== ws) return;
+      socket.current = null;
+      setError("Live view disconnected; reattach to the existing backend acquisition");
+      setState("error");
+    };
+  }, [detach]);
 
-  useEffect(() => { if (!connected) stop(); }, [connected, stop]);
-  useEffect(() => () => { socket.current?.close(); }, []);
-  const clear = useCallback(() => { setFrames([]); setReceived(0); lastTime.current = 0; }, []);
-  return { state, frames, error, received, lastTime: lastTime.current, start, stop, clear };
+  const reattach = useCallback(async () => {
+    if (!connected) return;
+    try {
+      const existing = await acquisitionApi.current();
+      if (!mounted.current) return;
+      setStatus(existing);
+      if (existing.state === "running") attach(existing);
+    } catch (cause) {
+      if (!mounted.current) return;
+      if (cause instanceof VersionedApiError && cause.code === "ACQUISITION_NOT_FOUND") {
+        setStatus(null);
+        setState("idle");
+        return;
+      }
+      setError(describeError(cause));
+      setState("error");
+    }
+  }, [attach, connected]);
+
+  useEffect(() => {
+    mounted.current = true;
+    if (connected) void reattach();
+    else {
+      detach();
+      setState("idle");
+    }
+    // Detach the UI only; do not stop the backend-owned acquisition.
+    return () => {
+      mounted.current = false;
+      detach();
+    };
+  }, [connected, detach, reattach]);
+
+  const start = useCallback(async (signals: SignalDefinition[], intervalMs: number) => {
+    if (!connected) {
+      setError("Connect the simulator before starting acquisition");
+      setState("error");
+      return;
+    }
+    detach();
+    setError("");
+    setState("connecting");
+    try {
+      const created = await acquisitionApi.create(
+        intervalMs,
+        signals.map(({ name, address, value_type }) => ({ name, address, value_type })),
+      );
+      if (!mounted.current) return;
+      setFrames([]);
+      setLatest(null);
+      setReceived(0);
+      setDropped(0);
+      pendingDrops.current = 0;
+      pausedRef.current = false;
+      setPaused(false);
+      attach(created);
+    } catch (cause) {
+      if (!mounted.current) return;
+      setError(describeError(cause));
+      setState("error");
+    }
+  }, [attach, connected, detach]);
+
+  const stop = useCallback(async () => {
+    const id = activeId.current ?? status?.acquisition_id;
+    if (!id) return;
+    try {
+      const stopped = await acquisitionApi.stop(id);
+      if (!mounted.current) return;
+      detach();
+      setStatus(stopped);
+      setState("idle");
+      setError("");
+    } catch (cause) {
+      if (!mounted.current) return;
+      setError(describeError(cause));
+      setState("error");
+    }
+  }, [detach, status?.acquisition_id]);
+
+  const togglePause = useCallback(() => {
+    pausedRef.current = !pausedRef.current;
+    setPaused(pausedRef.current);
+  }, []);
+
+  const clear = useCallback(() => {
+    setFrames([]);
+    setReceived(0);
+    setDropped(0);
+    pendingDrops.current = 0;
+    setLatest(null);
+  }, []);
+
+  return {
+    state, status, frames, latest, error, received, dropped, paused,
+    start, stop, reattach, togglePause, clear,
+  };
 }
