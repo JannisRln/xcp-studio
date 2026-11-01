@@ -1,0 +1,30 @@
+name: One-time frontend lockfile refresh
+on:
+  push:
+    branches: [feat/github-pages-live-demo]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  update-lockfile:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/github-pages-live-demo
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Update lockfile for pinned uPlot and React Grid Layout
+        working-directory: frontend
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Commit generated lockfile to feature branch
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/package-lock.json
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) { exit 0 }
+          git commit -m "build: lock uPlot and react-grid-layout versions"
+          git push origin HEAD:feat/github-pages-live-demo
