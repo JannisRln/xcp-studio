@@ -1,10 +1,12 @@
 mod security;
+mod hardware_policy;
 mod acquisition;
 mod api;
 
 use axum::{
     extract::{ws::{Message, WebSocket, WebSocketUpgrade}, DefaultBodyLimit, Extension, State},
     http::StatusCode,
+    response::IntoResponse,
     routing::{get, post},
     middleware, Json, Router,
 };
@@ -12,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use xcp_core::session::{SessionActor, SessionError, SessionHandle, SessionState};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::time::{interval, Duration, MissedTickBehavior};
+use tokio::time::{interval, timeout, Duration, MissedTickBehavior};
 use xcp_core::xcp::{CanIds, SimulatedSlave, SimulatedTransport, XcpMaster};
 
 type Session = SessionHandle;
@@ -53,13 +55,22 @@ async fn health() -> Json<Health> {
 }
 
 async fn inspect_elf(
+    Extension(parse_permit): Extension<Arc<security::ElfParsePermit>>,
     body: axum::body::Bytes,
 ) -> Result<Json<ElfResult>, (StatusCode, Json<ApiError>)> {
-    let symbols = xcp_core::elf::inspect_bytes(&body).map_err(|error| {
+    // Parsing malformed DWARF/ELF can be CPU intensive. Keep its semaphore
+    // permit alive even if the HTTP deadline cancels the waiting handler.
+    let symbols = tokio::task::spawn_blocking(move || {
+        let _permit = parse_permit;
+        xcp_core::elf::inspect_bytes(&body)
+    })
+    .await
+    .map_err(|_| internal_error())?
+    .map_err(|_| {
         (
             StatusCode::BAD_REQUEST,
             Json(ApiError {
-                error: error.to_string(),
+                error: "invalid or unsupported ELF input".into(),
             }),
         )
     })?;
@@ -102,7 +113,7 @@ async fn execute_xcp<T: Send + 'static>(
 ) -> Result<T, (StatusCode, Json<ApiError>)> {
     tokio::task::spawn_blocking(job)
         .await
-        .map_err(session_error)?
+        .map_err(|_| internal_error())?
         .map_err(session_error)
 }
 
@@ -140,11 +151,26 @@ async fn session_disconnect(
     }))
 }
 
-fn session_error(error: impl std::fmt::Display) -> (StatusCode, Json<ApiError>) {
+fn internal_error() -> (StatusCode, Json<ApiError>) {
     (
-        StatusCode::BAD_REQUEST,
+        StatusCode::INTERNAL_SERVER_ERROR,
         Json(ApiError {
-            error: error.to_string(),
+            error: security::safe_internal_error().into(),
+        }),
+    )
+}
+
+fn session_error(error: SessionError) -> (StatusCode, Json<ApiError>) {
+    let (status, message) = match error {
+        SessionError::Disconnected => (StatusCode::BAD_REQUEST, "XCP session is not connected"),
+        SessionError::Faulted => (StatusCode::SERVICE_UNAVAILABLE, "XCP session faulted"),
+        SessionError::WorkerStopped => (StatusCode::SERVICE_UNAVAILABLE, "XCP session unavailable"),
+        SessionError::Xcp(_) => (StatusCode::BAD_GATEWAY, "XCP operation failed"),
+    };
+    (
+        status,
+        Json(ApiError {
+            error: message.into(),
         }),
     )
 }
@@ -154,7 +180,14 @@ async fn session_read(
     Json(request): Json<ReadRequest>,
 ) -> Result<Json<ReadResult>, (StatusCode, Json<ApiError>)> {
     if request.count == 0 || request.count > 4096 {
-        return Err(session_error("count must be between 1 and 4096"));
+        return Err((StatusCode::BAD_REQUEST, Json(ApiError {
+            error: "count must be between 1 and 4096".into(),
+        })));
+    }
+    if request.address.checked_add((request.count - 1) as u32).is_none() {
+        return Err((StatusCode::BAD_REQUEST, Json(ApiError {
+            error: "read exceeds the address space".into(),
+        })));
     }
     let bytes = execute_xcp(move || session.read(request.address, request.count)).await?;
     let hex = bytes
@@ -237,14 +270,26 @@ async fn session_snapshot(
     Json(request): Json<SnapshotRequest>,
 ) -> Result<Json<SnapshotResult>, (StatusCode, Json<ApiError>)> {
     if request.signals.is_empty() || request.signals.len() > 64 {
-        return Err(session_error("signals must contain between 1 and 64 entries"));
+        return Err((StatusCode::BAD_REQUEST, Json(ApiError {
+            error: "signals must contain between 1 and 64 entries".into(),
+        })));
     }
     if request
         .signals
         .iter()
         .any(|signal| signal.name.trim().is_empty() || signal.name.len() > 128)
     {
-        return Err(session_error("signal names must contain 1 to 128 characters"));
+        return Err((StatusCode::BAD_REQUEST, Json(ApiError {
+            error: "signal names must contain 1 to 128 characters".into(),
+        })));
+    }
+
+    if request.signals.iter().any(|signal| {
+        signal.address.checked_add((signal.value_type.byte_count() - 1) as u32).is_none()
+    }) {
+        return Err((StatusCode::BAD_REQUEST, Json(ApiError {
+            error: "signal address exceeds the address space".into(),
+        })));
     }
 
     // A single actor owns all MTA transitions; requests from multiple
@@ -269,7 +314,7 @@ async fn session_snapshot(
 
     let timestamp_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_err(session_error)?
+        .map_err(|_| internal_error())?
         .as_millis();
     Ok(Json(SnapshotResult { timestamp_ms, samples }))
 }
@@ -286,39 +331,66 @@ struct StreamConfig {
 async fn stream_upgrade(
     ws: WebSocketUpgrade,
     State(session): State<Session>,
-) -> impl axum::response::IntoResponse {
-    ws.max_message_size(16 * 1024)
-        .max_frame_size(16 * 1024)
-        .on_upgrade(move |socket| stream_client(socket, session))
+    Extension(limits): Extension<Arc<security::SecurityLimits>>,
+) -> Result<impl IntoResponse, api::v1::ApiFailure> {
+    let permit = limits.legacy_websocket_permit()?;
+    Ok(ws
+        .max_message_size(security::MAX_WS_MESSAGE)
+        .max_frame_size(security::MAX_WS_MESSAGE)
+        .on_upgrade(move |socket| async move {
+            // A WS connection consumes a slot until it actually closes.
+            let _permit = permit;
+            stream_client(socket, session).await;
+        }))
+}
+
+fn valid_stream_config(config: &StreamConfig) -> bool {
+    (20..=10_000).contains(&config.interval_ms)
+        && !config.signals.is_empty()
+        && config.signals.len() <= 64
+        && config.signals.iter().all(|signal| {
+            !signal.name.trim().is_empty()
+                && signal.name.len() <= 128
+                && signal
+                    .address
+                    .checked_add((signal.value_type.byte_count() - 1) as u32)
+                    .is_some()
+        })
+}
+
+async fn send_stream_error(socket: &mut WebSocket, message: &'static str) {
+    let _ = timeout(
+        security::WS_SEND_TIMEOUT,
+        socket.send(Message::Text(message.into())),
+    )
+    .await;
+    let _ = timeout(security::WS_SEND_TIMEOUT, socket.send(Message::Close(None))).await;
 }
 
 async fn stream_client(mut socket: WebSocket, session: Session) {
-    let config = match socket.recv().await {
-        Some(Ok(Message::Text(text))) => serde_json::from_str::<StreamConfig>(&text).ok(),
+    let config = match timeout(security::WS_CONFIG_TIMEOUT, socket.recv()).await {
+        Ok(Some(Ok(Message::Text(text)))) => serde_json::from_str::<StreamConfig>(&text).ok(),
         _ => None,
     };
     let Some(config) = config else {
-        let _ = socket.send(Message::Text(r#"{"error":"expected stream configuration JSON"}"#.into())).await;
+        send_stream_error(&mut socket, r#"{"error":"expected stream configuration JSON"}"#).await;
         return;
     };
-    if !(20..=10_000).contains(&config.interval_ms)
-        || config.signals.is_empty()
-        || config.signals.len() > 64
-        || config.signals.iter().any(|s| s.name.trim().is_empty() || s.name.len() > 128)
-    {
-        let _ = socket.send(Message::Text(r#"{"error":"invalid interval or signals"}"#.into())).await;
+    if !valid_stream_config(&config) {
+        send_stream_error(&mut socket, r#"{"error":"invalid interval or signals"}"#).await;
         return;
     }
+
     let mut ticker = interval(Duration::from_millis(config.interval_ms));
     ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    let mut heartbeat = interval(Duration::from_secs(15));
+    heartbeat.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    heartbeat.tick().await;
     loop {
         tokio::select! {
             _ = ticker.tick() => {
                 let request = SnapshotRequest {
-                    signals: config.signals.iter().map(|s| SnapshotSignalRequest {
-                        name: s.name.clone(), address: s.address,
-                        value_type: s.value_type.clone(),
-                    }).collect(),
+                    signals: config.signals.clone(),
                 };
                 let result = session_snapshot(State(session.clone()), Json(request)).await;
                 let failed = result.is_err();
@@ -327,19 +399,37 @@ async fn stream_client(mut socket: WebSocket, session: Session) {
                     Err((_, Json(error))) => serde_json::to_string(&error).ok(),
                 };
                 let Some(payload) = payload else { break };
-                if socket.send(Message::Text(payload.into())).await.is_err() { break; }
+                match timeout(
+                    security::WS_SEND_TIMEOUT,
+                    socket.send(Message::Text(payload.into())),
+                ).await {
+                    Ok(Ok(())) => {}
+                    _ => break,
+                }
                 if failed { break; }
+            }
+            _ = heartbeat.tick() => {
+                if !matches!(
+                    timeout(
+                        security::WS_SEND_TIMEOUT,
+                        socket.send(Message::Ping(Vec::new().into())),
+                    ).await,
+                    Ok(Ok(()))
+                ) {
+                    break;
+                }
             }
             incoming = socket.recv() => {
                 match incoming {
-                    Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
-                    _ => {}
+                    Some(Ok(Message::Ping(_))) | Some(Ok(Message::Pong(_))) => {}
+                    // An unexpected second config or binary payload is not accepted.
+                    _ => break,
                 }
             }
         }
     }
+    let _ = timeout(security::WS_SEND_TIMEOUT, socket.send(Message::Close(None))).await;
 }
-
 
 /// Build one simulator and one XCP command owner per server process.
 fn simulated_session_actor() -> Result<SessionActor, xcp_core::xcp::XcpError> {
@@ -353,6 +443,8 @@ fn simulated_session_actor() -> Result<SessionActor, xcp_core::xcp::XcpError> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    hardware_policy::verify_startup_policy().map_err(std::io::Error::other)?;
+    let limits = Arc::new(security::SecurityLimits::default());
     let actor = simulated_session_actor()?;
     let session = actor.handle();
     let acquisition = Arc::new(acquisition::AcquisitionService::default());
@@ -361,7 +453,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/v1/health", get(api::v1::health))
         .route("/api/v1/sessions/current", get(api::v1::status))
         .route("/api/v1/sessions/current/reads", post(api::v1::read))
-        .route("/api/elf/inspect", post(inspect_elf))
+        .route(
+            "/api/elf/inspect",
+            post(inspect_elf).layer(DefaultBodyLimit::max(security::MAX_ELF_BODY)),
+        )
         .route("/api/xcp/status", get(session_status))
         .route("/api/xcp/connect", post(session_connect))
         .route("/api/xcp/disconnect", post(session_disconnect))
@@ -373,9 +468,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/v1/acquisitions/{id}", get(acquisition::status))
         .route("/api/v1/acquisitions/{id}/stop", post(acquisition::stop))
         .route("/api/v1/acquisitions/{id}/stream", get(acquisition::subscribe))
-        .layer(DefaultBodyLimit::max(32 * 1024 * 1024))
+        .layer(DefaultBodyLimit::max(security::MAX_JSON_BODY))
         .layer(Extension(acquisition))
-        .layer(middleware::from_fn(security::local_api_guard))
+        .layer(Extension(Arc::clone(&limits)))
+        .layer(middleware::from_fn_with_state(
+            limits,
+            security::local_api_guard,
+        ))
         .with_state(session);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:8080").await?;
     println!("XCP Studio API: http://127.0.0.1:8080/api/health");
@@ -491,6 +590,53 @@ mod snapshot_tests {
         for task in tasks {
             task.await.unwrap();
         }
+    }
+
+    #[test]
+    fn rejects_stream_address_overflow_and_unbounded_configuration() {
+        let good = r#"{"interval_ms":20,"signals":[{"name":"rpm","address":4096,"value_type":"u32"}]}"#;
+        let mut config: StreamConfig = serde_json::from_str(good).unwrap();
+        assert!(valid_stream_config(&config));
+        config.signals[0].address = u32::MAX;
+        assert!(!valid_stream_config(&config));
+        config.signals[0].address = 4096;
+        config.interval_ms = 19;
+        assert!(!valid_stream_config(&config));
+        config.interval_ms = 20;
+        config.signals[0].name = "x".repeat(129);
+        assert!(!valid_stream_config(&config));
+        config.signals[0].name = "rpm".into();
+        config.signals = vec![config.signals[0].clone(); 65];
+        assert!(!valid_stream_config(&config));
+    }
+
+    #[tokio::test]
+    async fn rejects_overflow_before_touching_the_xcp_session() {
+        let actor = simulated_session_actor().unwrap();
+        let session = actor.handle();
+        let failed = session_read(
+            State(session.clone()),
+            Json(ReadRequest { address: u32::MAX, count: 2 }),
+        )
+        .await
+        .err()
+        .unwrap();
+        assert_eq!(failed.0, StatusCode::BAD_REQUEST);
+        assert!(failed.1 .0.error.contains("address space"));
+        let snapshot = session_snapshot(
+            State(session),
+            Json(SnapshotRequest {
+                signals: vec![SnapshotSignalRequest {
+                    name: "unsafe".into(),
+                    address: u32::MAX,
+                    value_type: SnapshotValueType::F64,
+                }],
+            }),
+        )
+        .await
+        .err()
+        .unwrap();
+        assert_eq!(snapshot.0, StatusCode::BAD_REQUEST);
     }
 
     #[test]
