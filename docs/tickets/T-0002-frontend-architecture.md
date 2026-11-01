@@ -1,5 +1,3 @@
-# T-0002 — Complete modular accessible dashboard architecture
-
 ---
 id: T-0002
 title: Complete modular accessible dashboard architecture
@@ -12,6 +10,8 @@ github_issue: 5
 depends_on: []
 requirements: [UI-001, UI-002, UI-003, UI-004, ECU-011, ECU-012]
 ---
+
+# T-0002 — Complete modular accessible dashboard architecture
 
 ## Context / desired behavior
 
