@@ -1,0 +1,57 @@
+name: Prune merged branches
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: prune-merged-branches
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete verified merged source branches
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const repository = `${owner}/${repo}`;
+            const closed = await github.paginate(github.rest.pulls.list, {
+              owner, repo, state: "closed", per_page: 100
+            });
+            const open = await github.paginate(github.rest.pulls.list, {
+              owner, repo, state: "open", per_page: 100
+            });
+            let deleted = 0;
+            for (const pr of closed) {
+              if (!pr.merged_at || pr.head.repo?.full_name !== repository) continue;
+              const branch = pr.head.ref;
+              if (!/^(feat|fix|docs|chore)\/[A-Za-z0-9._/-]+$/.test(branch)) continue;
+              if (branch === "main" || open.some(item => item.head.ref === branch &&
+                  item.head.repo?.full_name === repository)) continue;
+              let current;
+              try {
+                const response = await github.rest.repos.getBranch({ owner, repo, branch });
+                current = response.data;
+              } catch (error) {
+                if (error.status === 404) continue;
+                throw error;
+              }
+              if (current.protected || current.commit.sha !== pr.head.sha) {
+                core.info(`Keeping ${branch}: protected or changed since merged PR #${pr.number}`);
+                continue;
+              }
+              await github.rest.git.deleteRef({
+                owner, repo, ref: `heads/${branch}`
+              });
+              core.info(`Deleted ${branch} (merged PR #${pr.number})`);
+              deleted++;
+            }
+            core.notice(`Removed ${deleted} verified merged branches`);
