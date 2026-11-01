@@ -362,7 +362,7 @@ pub fn compare_to_dwarf(a2l: &A2lObject, dwarf: &TypedVariable) -> Vec<MetadataC
             (raw.kind() != dwarf.descriptor.kind || dwarf.descriptor.byte_size != Some(raw.width())) =>
             conflicts.push(MetadataConflict::Type {
                 a2l: raw,
-                dwarf_kind: dwarf.descriptor.kind.clone(),
+                dwarf_kind: dwarf.descriptor.kind,
                 dwarf_width: dwarf.descriptor.byte_size,
             }),
         None => conflicts.push(MetadataConflict::UnknownA2lType),
