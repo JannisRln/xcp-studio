@@ -61,8 +61,8 @@ describe("T-0010 project file codec", () => {
     const loaded = importProject(encoded);
     expect(loaded.project).toEqual(initial);
     expect(loaded.migration).toBeNull();
-    expect(loaded.warnings).toEqual([]);
-    expect(loaded.blockedSignalIds).toEqual([]);
+    expect(loaded.warnings.map(w => w.code)).toEqual(["UNVERIFIED_ECU_FILE", "UNVERIFIED_ECU_FILE"]);
+    expect(loaded.blockedSignalIds).toEqual(["rpm", "temp"]);
     expect(exportProject(loaded.project)).toBe(encoded);
     expect(encoded).not.toMatch(/password|accessToken|credentials/i);
   });
@@ -73,7 +73,7 @@ describe("T-0010 project file codec", () => {
     const loaded = importProject(json);
     expect(JSON.stringify(legacy)).toBe(json);
     expect(loaded.migration).toEqual({ from: 1, to: 2 });
-    expect(loaded.warnings.map(w => w.code)).toEqual(["MIGRATED"]);
+    expect(loaded.warnings.map(w => w.code)).toEqual(["MIGRATED", "UNVERIFIED_ECU_FILE", "UNVERIFIED_ECU_FILE"]);
     expect(loaded.project).toEqual(fixture());
     expect(importProject(exportProject(loaded.project)).migration).toBeNull();
   });
@@ -90,7 +90,7 @@ describe("T-0010 project file codec", () => {
     expect(blockedSignalIds).toEqual(["rpm", "temp"]);
     expect(blockedSignalIds).not.toContain("manual");
     expect(importProject(exportProject(project), observed).blockedSignalIds).toEqual(["rpm", "temp"]);
-    expect(importProject(exportProject(project)).warnings).toEqual([]);
+    expect(importProject(exportProject(project)).warnings.map(w => w.code)).toEqual(["UNVERIFIED_ECU_FILE", "UNVERIFIED_ECU_FILE"]);
   });
 
   it("accepts files only if SHA-256, byte count and kind match", () => {
