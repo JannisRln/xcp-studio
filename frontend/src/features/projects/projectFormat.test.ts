@@ -183,6 +183,17 @@ describe("T-0010 project file codec", () => {
     })).rejects.toMatchObject({ code: "FILE_READ_FAILED", message: "Unable to read project file" });
   });
 
+  it("never trusts duplicate observations for one ECU file ID", () => {
+    const file = fixture().ecuFiles[0];
+    const observations = [
+      { id: file.id, kind: file.kind, sha256: "f".repeat(64), sizeBytes: file.sizeBytes },
+      { id: file.id, kind: file.kind, sha256: file.sha256, sizeBytes: file.sizeBytes },
+    ];
+    const checked = reconcileEcuFiles(fixture(), observations);
+    expect(checked.warnings.some(w => w.code === "CHANGED_ECU_FILE" && w.fileId === file.id)).toBe(true);
+    expect(checked.blockedSignalIds).toContain("rpm");
+  });
+
   it("reads a real Blob using the same parser", async () => {
     const json = exportProject(fixture());
     const blob = new Blob([json], { type: "application/json" });
