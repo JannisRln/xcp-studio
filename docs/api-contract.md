@@ -1,0 +1,270 @@
+# API and Streaming Contract
+
+**Scope:** API contract and proposed evolution. **CURRENT** means implemented in the default-branch backend at specification authoring; **TARGET** means design proposal requiring a ticket, tests and code. No TARGET endpoint may be treated as callable before it is implemented.
+
+Related: [architecture](architecture.md), [requirements](requirements.md) (API-001..004), [ADR-0001](adr/0001-control-and-streaming.md), [ADR-0002](adr/0002-session-and-acquisition-ownership.md).
+
+## 1. Protocol boundaries
+
+- HTTP JSON requests/responses over the loopback Axum server (default 127.0.0.1:8080).
+- HTTP binary upload only for ELF inspection; maximum currently 32 MiB.
+- WebSocket for measurement data. Initial client text message configures current stream.
+- The Vite development proxy must support HTTP and WebSocket upgrade. Browser URLs use ws: on HTTP and wss: on HTTPS.
+- This interface is **not remotely authenticated**. Do not expose the server on 0.0.0.0 or a public proxy without implementing the security milestone.
+- No external agent may assume xcp-core's Rust types are wire-stable; API DTOs are separately versioned.
+
+## 2. CURRENT REST routes
+
+| Method | Endpoint | Request | Success | Known limitation |
+| --- | --- | --- | --- | --- |
+| GET | /api/health | none | {status,mode,version} | mode reports simulation |
+| POST | /api/elf/inspect | ELF bytes, application/octet-stream | {symbols:[...],count} | raw ELF symbols, no full typed DWARF variable tree |
+| GET | /api/xcp/status | none | {connected,transport} | boolean and simulation transport only |
+| POST | /api/xcp/connect | none | {connected:true,transport:"simulation"} | singleton simulator session |
+| POST | /api/xcp/disconnect | none | {connected:false,transport:"simulation"} | no persistent acquisition coordination |
+| POST | /api/xcp/read | JSON {address,count} | {address,bytes,hex} | count 1–4096, requires connected session |
+| POST | /api/xcp/snapshot | JSON {signals:[...]} | {timestamp_ms,samples:[...]} | per-signal serialized XCP reads; 1–64 signals |
+| GET (Upgrade) | /api/xcp/stream | first WS text frame is configuration JSON | repeated snapshot JSON | per-client polling schedule, no DAQ/shared recorder |
+
+Existing routes are unversioned; target versioned routes must be implemented additively/migrated under an explicit compatibility ticket.
+
+### 2.1 Current ELF inspection
+
+Request: POST /api/elf/inspect with raw ELF bytes. Response:
+
+~~~json
+{
+  "count": 1,
+  "symbols": [
+    {
+      "name": "engine_speed",
+      "address": 4096,
+      "address_hex": "0x1000",
+      "size": 4,
+      "kind": "data"
+    }
+  ]
+}
+~~~
+
+Example is *shape only*, not a promise that a particular ELF fixture exists. The symbol address is link-time metadata and **must not** automatically become a validated runtime ECU address.
+
+### 2.2 Current read and typed snapshot
+
+~~~http
+POST /api/xcp/read
+Content-Type: application/json
+
+{"address":4096,"count":4}
+~~~
+
+~~~json
+{"address":4096,"bytes":[58,7,0,0],"hex":"3A 07 00 00"}
+~~~
+
+~~~http
+POST /api/xcp/snapshot
+Content-Type: application/json
+
+{"signals":[
+  {"name":"Engine speed","address":4096,"value_type":"u32"},
+  {"name":"Coolant temperature","address":4100,"value_type":"f32"}
+]}
+~~~
+
+~~~json
+{
+  "timestamp_ms": 1761980000000,
+  "samples": [
+    {"name":"Engine speed","address":4096,"value":1850},
+    {"name":"Coolant temperature","address":4100,"value":88.5}
+  ]
+}
+~~~
+
+Value types accepted by the prototype: u8, i8, u16, i16, u32, i32, f32, f64 (lowercase snake_case enum). Current simulator byte order is little-endian and addresses are 32-bit unsigned. JSON numbers are not appropriate for exact future 64-bit integer semantics; define explicit decimal-string or byte encoding first.
+
+The current snapshot timestamp is a UTC epoch milliseconds host-clock observation **after** sequential reads, not a hardware sample timestamp or a monotonic scheduler clock. No claim of precise simultaneity is allowed.
+
+### 2.3 Current WebSocket protocol
+
+1. Connect to ws://127.0.0.1:8080/api/xcp/stream.
+2. Send exactly one initial text message containing:
+
+~~~json
+{
+  "interval_ms": 100,
+  "signals": [
+    {"name":"Engine speed","address":4096,"value_type":"u32"},
+    {"name":"Coolant temperature","address":4100,"value_type":"f32"}
+  ]
+}
+~~~
+
+3. Receive repeated JSON snapshot frames with timestamp_ms and samples. interval_ms is 20–10000 inclusive; 1–64 signals; signal names contain 1–128 characters and cannot be whitespace-only.
+4. On error the server may send {"error":"..."} and terminate. The current implementation has no stable error code, frame sequence, acquisition ID, quality or loss metadata.
+
+The stream is **per WebSocket client**: opening another tab creates another polling schedule. That is explicitly not the target architecture.
+
+### 2.4 Current errors
+
+The current server uses response body {"error":"message"} for common 400 BAD_REQUEST paths (including disconnected session and invalid count). This is a prototype error shape; clients must check HTTP status. Some errors can differ by route. There is no guaranteed stable error code until API-002 is implemented.
+
+## 3. TARGET REST API v1 (design proposal; not currently implemented)
+
+All endpoints below require an implementing ticket and contract tests; names are tentative until API-001 is accepted.
+
+| Method | Proposed route | Purpose | State owner |
+| --- | --- | --- | --- |
+| GET | /api/v1/health | Ready/version/capability summary | API |
+| GET | /api/v1/adapters | Enumerate simulator/PCAN/Vector and capabilities | Transport registry |
+| POST | /api/v1/sessions | Connect using validated ConnectionProfile | Session actor |
+| GET | /api/v1/sessions/{id} | State, ECU identity, capabilities | Session actor |
+| DELETE | /api/v1/sessions/{id} | Explicit disconnect | Session actor |
+| POST | /api/v1/ecu-images | Import ELF and optional A2L source | Metadata service |
+| GET | /api/v1/ecu-images/{id}/variables | Paged search, types, location state | Metadata service |
+| POST | /api/v1/variables/resolve | Resolve runtime/indirect location safely | Resolver |
+| POST | /api/v1/sessions/{id}/reads | Typed or raw one-shot read | Session actor |
+| POST | /api/v1/acquisitions | Validate and create acquisition, then start | Acquisition service |
+| GET | /api/v1/acquisitions/{id} | Lifecycle, rates, buffers, drops | Acquisition service |
+| POST | /api/v1/acquisitions/{id}/stop | Graceful stop (idempotent) | Acquisition service |
+| GET | /api/v1/acquisitions/{id}/stream (WS) | Subscribe to existing acquisition | Acquisition service |
+| POST | /api/v1/recordings | Start bounded backend recording | Recorder |
+| POST | /api/v1/recordings/{id}/stop | Flush and finalize | Recorder |
+| GET | /api/v1/recordings/{id}/export | Download CSV with metadata | Recorder |
+| POST | /api/v1/calibrations/preview | Validate typed proposed change | Calibration service |
+| POST | /api/v1/calibrations/commit | Explicit confirmed write/verify | Calibration service |
+| GET | /api/v1/diagnostics | Session/acquisition/transport counters | Observability |
+
+### 3.1 Proposed error envelope
+
+~~~json
+{
+  "schema_version": 1,
+  "error": {
+    "code": "XCP_SESSION_DISCONNECTED",
+    "message": "The requested ECU session is not connected.",
+    "request_id": "req-opaque-id",
+    "details": {"session_id": "session-opaque-id"},
+    "retryable": false
+  }
+}
+~~~
+
+Stable codes map to HTTP status: VALIDATION (400 or 422), CONFLICT/INVALID_STATE (409), UNAUTHORIZED/FORBIDDEN (401/403 if auth introduced), NOT_FOUND (404), TIMEOUT (504), DEVICE_UNAVAILABLE (503), INTERNAL (500). No internal memory bytes, absolute user paths or driver credentials in public error messages. Define error compatibility and field validation before migration.
+
+### 3.2 Proposed connection profile and session
+
+~~~json
+{
+  "profile": {
+    "transport": "simulation",
+    "can_ids": {"command": 1639, "response": 1638},
+    "bitrate": null,
+    "adapter_id": "builtin-simulator"
+  }
+}
+~~~
+
+Expected session includes opaque session_id, state, capabilities, transport and ECU identity. Hardware-specific transport parameters are validated by the adapter, not interpreted as simulator fields.
+
+### 3.3 Proposed measurement config
+
+~~~json
+{
+  "session_id": "session-opaque-id",
+  "sampling": {"mode": "auto", "fallback": "polling", "interval_ms": 100},
+  "signals": [
+    {
+      "signal_id": "engine-speed",
+      "variable_id": "ecu-image/variable-path",
+      "resolved_address": {"space": "ecu", "address": "0x00001000", "extension": 0},
+      "raw_type": "u32",
+      "endianness": "little"
+    }
+  ],
+  "recording": {"enabled": false}
+}
+~~~
+
+The resolver must validate runtime address and variable type **server-side**, rather than trusting arbitrary browser-provided addresses. Manual raw-address signals need an explicitly distinguishable access policy.
+
+## 4. TARGET WebSocket v1 message envelopes
+
+A client **subscribes** to an already created acquisition; it does not start a new ECU polling loop. A single session/acquisition can have multiple subscribers.
+
+### 4.1 Start and metadata
+
+~~~json
+{
+  "schema_version": 1,
+  "type": "acquisition.started",
+  "acquisition_id": "acq-opaque-id",
+  "session_id": "session-opaque-id",
+  "timestamp_origin": "host-utc",
+  "monotonic_clock": "process-monotonic",
+  "sampling_mode": "polling",
+  "units": {"engine-speed": "rpm"}
+}
+~~~
+
+### 4.2 Sample batch
+
+~~~json
+{
+  "schema_version": 1,
+  "type": "samples",
+  "acquisition_id": "acq-opaque-id",
+  "sequence": 42,
+  "host_timestamp_ns": "1761980000000000000",
+  "monotonic_elapsed_ns": "4200000000",
+  "dropped_since_previous": 0,
+  "signals": [
+    {
+      "signal_id": "engine-speed",
+      "raw": {"type": "u32", "value": "1850"},
+      "physical": 1850.0,
+      "unit": "rpm",
+      "quality": "valid"
+    }
+  ]
+}
+~~~
+
+**Numeric representation rationale:** 64-bit nanoseconds and exact integers use decimal strings on JSON to avoid JavaScript precision loss. Schema must define null/missing/invalid quality states, gap semantics, monotonic origin and conversion provenance.
+
+### 4.3 State change and drop notification
+
+~~~json
+{
+  "schema_version": 1,
+  "type": "acquisition.status",
+  "acquisition_id": "acq-opaque-id",
+  "state": "stopped",
+  "last_sequence": 420,
+  "lost_samples": 2,
+  "reason": "operator-stop"
+}
+~~~
+
+Subscriber-specific queue overflow should report a gap without blocking ECU reads. Disconnect signals must be distinct from WebSocket network failure. Reconnect/resume semantics (replay range, retention bounds, duplicate handling) require explicit design and integration tests; do not imply guaranteed replay before it is implemented.
+
+## 5. Calibration transaction protocol (target)
+
+1. GET variable or POST preview reads baseline and validates type, range, permissions and ECU identity.
+2. POST preview returns transaction token, baseline, desired raw bytes and physical units; token expires and is scoped to a session/image.
+3. UI displays preview and operator confirms.
+4. POST commit supplies token and expected baseline/version. Backend serializes write and readback.
+5. Backend returns verified/mismatch/rejected/unknown outcome, actual readback and audit reference.
+6. A timeout after transmission is **unknown outcome**, not automatic failure with assumed unchanged ECU state.
+
+**No /api/v1/calibrations/commit route exists in the current backend.** All hardware writes stay disabled until policy and testing are complete.
+
+## 6. Versioning and consumer-driven testing
+
+- Current unversioned routes are compatibility constraints while used by deployed frontends.
+- Propose new /api/v1 endpoints additively; breaking schema changes bump schema_version or API path.
+- Both Rust server DTOs and TypeScript decoding must use representative fixtures for success, malformed input, missing fields, unknown types, precision and errors.
+- API fixture files should be shared between backend and frontend tests to prevent semantic drift.
+- Never mark API-001..004 done based on documentation alone. Test the implementation and update this file with observed routes, not hypothetical behavior.
+- Origin/security controls are a release blocker for network-exposed endpoints.
