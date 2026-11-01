@@ -1,5 +1,3 @@
-# T-0011 — Simulator end-to-end acceptance and measured performance
-
 ---
 id: T-0011
 title: Simulator end-to-end acceptance and measured performance
@@ -12,6 +10,8 @@ github_issue: 3
 depends_on: [T-0005, T-0006, T-0007]
 requirements: [QA-003, QA-007]
 ---
+
+# T-0011 — Simulator end-to-end acceptance and measured performance
 
 ## Context / desired behavior
 
