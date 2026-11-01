@@ -1,5 +1,3 @@
-# T-0012 — Versioned REST and WebSocket contracts with cross-language tests
-
 ---
 id: T-0012
 title: Versioned REST and WebSocket contracts with cross-language tests
@@ -12,6 +10,8 @@ github_issue: 8
 depends_on: []
 requirements: [API-001, API-002, API-003, API-004, DIAG-001]
 ---
+
+# T-0012 — Versioned REST and WebSocket contracts with cross-language tests
 
 ## Context / desired behavior
 
