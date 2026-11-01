@@ -20,7 +20,7 @@ const navigation: Array<{ page: Page; icon: string; description: string }> = [
 ];
 const descriptions: Record<Page, string> = {
   Overview: "Your ECU measurement and calibration workspace.",
-  Measurements: "Live values from the connected XCP simulator, visualized and recorded.",
+  Measurements: "Monitor ECU signals live. Charts and values take priority; export is optional.",
   Symbols: "Explore ELF symbols and configure acquisition channels.",
   Connections: "Manage the XCP session and inspect ECU memory.",
   Calibration: "Calibration operations require a verified write and readback API.",
@@ -28,7 +28,7 @@ const descriptions: Record<Page, string> = {
 };
 
 export function App() {
-  const [page, setPage] = useState<Page>("Overview");
+  const [page, setPage] = useState<Page>("Measurements");
   const [health, setHealth] = useState<Health | null>(null);
   const [checking, setChecking] = useState(true);
   const [connected, setConnected] = useState(false);
@@ -101,7 +101,7 @@ export function App() {
       <nav id="studio-navigation" aria-label="Main navigation">{navigation.map(item =>
         <button key={item.page} className={page === item.page ? "sidebar-link active" : "sidebar-link"}
           onClick={() => navigate(item.page)} title={item.description} aria-current={page === item.page ? "page" : undefined}>
-          <span className="sidebar-icon">{item.icon}</span><span>{item.page}</span>
+          <span className="sidebar-icon">{item.icon}</span><span>{item.page === "Measurements" ? "Live View" : item.page}</span>
           {item.page === "Measurements" && <small>{signals.length}</small>}
         </button>)}</nav>
       <div className="sidebar-footer"><div><span className={connected ? "connection-light on" : "connection-light"} />
@@ -112,7 +112,7 @@ export function App() {
       <header className="studio-topbar">
         <div className="topbar-left"><button className="menu-toggle" onClick={() => setSidebarOpen(value => !value)}
           aria-label="Toggle navigation" aria-expanded={sidebarOpen} aria-controls="studio-navigation">☰</button>
-          <span>Workspace</span><span className="breadcrumb-separator">/</span><strong>{page}</strong></div>
+          <span>Workspace</span><span className="breadcrumb-separator">/</span><strong>{page === "Measurements" ? "Live View" : page}</strong></div>
         <div className="topbar-right"><span className={health ? "health-indicator online" : "health-indicator"} role="status" aria-live="polite">
           <span className="connection-light" />API {checking ? "Checking" : health ? "Online" : "Offline"}</span>
           <button className="button small" disabled={checking} onClick={() => void refresh()} title="Refresh connection status">↻ Refresh</button>
@@ -120,12 +120,13 @@ export function App() {
       </header>
       <main className="studio-content">
         <div className="page-heading"><div><div className="eyebrow">XCP STUDIO / {page.toUpperCase()}</div>
-          <h1 ref={headingRef} tabIndex={-1}>{page === "Symbols" ? "Symbol Browser" : page}</h1><p>{descriptions[page]}</p></div>
+          <h1 ref={headingRef} tabIndex={-1}>{page === "Measurements" ? "Live View" : page === "Symbols" ? "Symbol Browser" : page}</h1><p>{descriptions[page]}</p></div>
           <span className="mode-badge">SIMULATION MODE</span></div>
         {error && <div className="error-banner" role="alert">{error} <button type="button" className="button small" onClick={() => void refresh()}>Retry API</button></div>}
         <AppErrorBoundary key={page} onRecover={() => void refresh()}>
         {page === "Overview" && <OverviewPage health={health} connected={connected} signals={signals} onNavigate={navigate} />}
-        {page === "Measurements" && <MeasurementsPage connected={connected} signals={signals}
+        {page === "Measurements" && <MeasurementsPage connected={connected} connecting={busy}
+          onConnect={() => sessionAction("connect")} signals={signals}
           selectedIds={selectedIds}
           onToggle={id => setWorkspace(previous => toggleWorkspaceSignal(previous, id))}
           onRemove={id => setWorkspace(previous => removeWorkspaceSignal(previous, id))} />}
