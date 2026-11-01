@@ -13,7 +13,8 @@
  */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
@@ -138,6 +139,11 @@ async function samples(stream, howMany) {
   return batches;
 }
 
+/**
+ * Inspect the ACTUAL React DOM in headless Edge over Chrome DevTools Protocol.
+ * A picture captured before samples arrive would misrepresent the Live View.
+ * Node's built-in WebSocket is used; no additional npm test dependencies.
+ */
 async function captureScreenshot() {
   const output = process.env.XCP_E2E_SCREENSHOT;
   if (!output || process.platform !== "win32") return;
@@ -147,28 +153,158 @@ async function captureScreenshot() {
   ];
   const edge = locations.find(existsSync);
   if (!edge) {
-    console.log("Screenshot skipped: Microsoft Edge is not installed");
+    console.log("Browser screenshot skipped: Microsoft Edge unavailable");
     return;
   }
-  const shot = resolve(output);
-  const runner = spawn(edge, [
-    "--headless=new", "--disable-gpu", "--hide-scrollbars", "--no-first-run",
-    "--window-size=1440,1100", "--virtual-time-budget=6000",
-    `--screenshot=${shot}`, api + "/",
-  ], { windowsHide: true, stdio: "ignore" });
-  await Promise.race([
-    new Promise((done, fail) => {
-      runner.once("exit", code => code === 0 ? done() : fail(
-        new Error(`Edge screenshot exited with code ${code}`)));
-      runner.once("error", fail);
-    }),
-    delay(25000).then(() => {
-      runner.kill();
-      throw new Error("Edge screenshot timed out");
-    }),
-  ]);
-  assert.ok(existsSync(shot), "Edge screenshot artifact was not created");
-  console.log("SCREENSHOT " + shot);
+  const profile = mkdtempSync(join(tmpdir(), "xcp-live-edge-"));
+  const runner = launch(edge, [
+    "--headless=new", "--disable-gpu", "--hide-scrollbars",
+    "--no-first-run", "--no-default-browser-check",
+    "--no-sandbox", "--remote-debugging-address=127.0.0.1",
+    "--remote-debugging-port=0", "--remote-allow-origins=*",
+    "--window-size=1440,1100",
+    "--user-data-dir=" + profile,
+    api + "/",
+  ], root);
+  let browser;
+  try {
+    const deadline = Date.now() + 20000;
+    let port;
+    while (Date.now() < deadline) {
+      const location = join(profile, "DevToolsActivePort");
+      if (existsSync(location)) {
+        port = Number(readFileSync(location, "utf8").split(/\r?\n/)[0]);
+        if (Number.isInteger(port) && port > 0) break;
+      }
+      if (runner.exitCode !== null) {
+        throw new Error("Edge closed before DevTools was ready: " + runner.exitCode);
+      }
+      await delay(150);
+    }
+    assert.ok(port, "Timed out waiting for Edge DevTools port");
+
+    let tab;
+    while (Date.now() < deadline) {
+      try {
+        const response = await fetch("http://127.0.0.1:" + port + "/json/list", {
+          signal: AbortSignal.timeout(2000),
+        });
+        const targets = await response.json();
+        tab = targets.find(target => target.type === "page" && target.webSocketDebuggerUrl);
+        if (tab) break;
+      } catch {
+        // Browser target may not have been initialized yet.
+      }
+      await delay(150);
+    }
+    assert.ok(tab, "No Edge page target available");
+
+    browser = new WebSocket(tab.webSocketDebuggerUrl);
+    await Promise.race([
+      new Promise((resolveOpen, rejectOpen) => {
+        browser.addEventListener("open", resolveOpen, { once: true });
+        browser.addEventListener("error", rejectOpen, { once: true });
+      }),
+      delay(10000).then(() => { throw new Error("Edge DevTools connection timed out"); }),
+    ]);
+
+    let nextId = 0;
+    const pending = new Map();
+    browser.addEventListener("message", event => {
+      const reply = JSON.parse(String(event.data));
+      if (!reply.id) return;
+      const item = pending.get(reply.id);
+      if (!item) return;
+      pending.delete(reply.id);
+      if (reply.error) item.reject(new Error(
+        "CDP " + item.method + ": " + reply.error.message,
+      ));
+      else item.resolve(reply.result);
+    });
+    const cdp = (method, params = {}) => new Promise((resolveCall, rejectCall) => {
+      const id = ++nextId;
+      const timer = setTimeout(() => {
+        pending.delete(id);
+        rejectCall(new Error("CDP " + method + " timed out"));
+      }, 10000);
+      pending.set(id, {
+        method,
+        resolve: value => { clearTimeout(timer); resolveCall(value); },
+        reject: error => { clearTimeout(timer); rejectCall(error); },
+      });
+      browser.send(JSON.stringify({ id, method, params }));
+    });
+
+    await cdp("Page.enable");
+    await cdp("Runtime.enable");
+    await cdp("Emulation.setDeviceMetricsOverride", {
+      width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false,
+    });
+    await cdp("Page.navigate", { url: api + "/" });
+
+    const evaluate = async expression => {
+      const response = await cdp("Runtime.evaluate", {
+        expression, returnByValue: true, awaitPromise: false,
+      });
+      if (response.exceptionDetails) {
+        throw new Error("React DOM evaluation failed: " +
+          response.exceptionDetails.text);
+      }
+      return response.result?.value;
+    };
+    let observation = null;
+    const readyDeadline = Date.now() + 20000;
+    while (Date.now() < readyDeadline) {
+      observation = await evaluate(
+        "(() => ({title:document.querySelector('h1')?.textContent||''," +
+        "live:document.body.innerText.includes('Receiving live samples')," +
+        "rpm:document.body.innerText.includes('1,850')," +
+        "coolant:document.body.innerText.includes('88.5')," +
+        "curves:[...document.querySelectorAll('.timeseries polyline')]" +
+        ".filter(line => (line.getAttribute('points')||'').includes(',')).length," +
+        "body:document.body.innerText.slice(0,600)}))()",
+      );
+      if (observation?.title === "Live View" && observation.live &&
+          observation.rpm && observation.coolant && observation.curves >= 2) {
+        break;
+      }
+      await delay(250);
+    }
+    assert.equal(observation?.title, "Live View", "Unexpected page heading");
+    assert.ok(observation.live && observation.rpm && observation.coolant &&
+      observation.curves >= 2,
+      "Actual React UI did not render live data and 2 curves: " + JSON.stringify(observation));
+    console.log("PASS real Edge browser rendered LIVE badge, RPM, coolant and chart polylines");
+
+    const clicked = await evaluate(
+      "(() => {const button=[...document.querySelectorAll('button')]" +
+      ".find(item=>item.textContent.trim()==='Pause chart');" +
+      "if (!button) return false;button.click();return true})()",
+    );
+    assert.ok(clicked, "Live chart pause button unavailable");
+    await delay(100);
+    assert.equal(await evaluate(
+      "document.body.innerText.includes('Resume chart')",
+    ), true, "Clicking pause did not update React view");
+    await evaluate(
+      "(() => {const button=[...document.querySelectorAll('button')]" +
+      ".find(item=>item.textContent.trim()==='Resume chart');" +
+      "if (!button) return false;button.click();return true})()",
+    );
+    console.log("PASS live chart pause/resume interaction without stopping acquisition");
+
+    const screenshot = await cdp("Page.captureScreenshot", {
+      format: "png", captureBeyondViewport: false, fromSurface: true,
+    });
+    const shot = resolve(output);
+    writeFileSync(shot, Buffer.from(screenshot.data, "base64"));
+    assert.ok(existsSync(shot), "Actual Edge screenshot was not created");
+    console.log("SCREENSHOT " + shot);
+  } finally {
+    if (browser) browser.close();
+    runner.kill();
+    rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+  }
 }
 
 async function run() {
