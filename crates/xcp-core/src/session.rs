@@ -1,16 +1,26 @@
-//! Serialized XCP session actor for stateful command execution.
+//! Serialized XCP session actor with bounded queuing and command deadlines.
 //!
-//! A single worker owns the XcpMaster and is the only caller that may change
-//! its MTA. Cloned handles submit whole read/write transactions, preventing
-//! concurrent frontends or services from interleaving SET_MTA/UPLOAD/DOWNLOAD.
-//! The underlying transport must impose a bounded timeout on receive calls.
+//! Each worker exclusively owns the master and executes complete MTA-dependent
+//! transactions. Expired queued operations are discarded without touching the ECU.
+//! An in-flight timeout faults the session because a write may have partially
+//! reached the target. Recovery is always explicitly initiated by the caller.
+//! Hardware transports must honor receive_with_timeout: synchronous driver calls
+//! that ignore the bound cannot be interrupted by the actor.
 
-use crate::xcp::{XcpError, XcpMaster};
+use crate::xcp::{XcpError, XcpMaster, ERR_SEQUENCE};
 use crate::CanTransport;
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    mpsc::{self, Receiver, Sender, SyncSender, TrySendError},
+    Arc,
+};
 use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
 
-/// Public session lifecycle exposed to service consumers.
+const QUEUE_CAPACITY: usize = 128;
+const DEFAULT_COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Session state; faulted sessions reject I/O until explicit reconnect.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionState {
     Disconnected,
@@ -26,42 +36,97 @@ pub enum SessionError {
     Faulted,
     #[error("XCP session worker is no longer available")]
     WorkerStopped,
+    #[error("XCP command queue is full")]
+    QueueFull,
+    #[error("XCP command deadline exceeded; the ECU outcome may be unknown")]
+    Timeout,
     #[error(transparent)]
     Xcp(#[from] XcpError),
 }
 
-type Reply<T> = Sender<Result<T, SessionError>>;
+#[derive(Clone)]
+struct Ticket {
+    deadline: Instant,
+    cancelled: Arc<AtomicBool>,
+}
+
+impl Ticket {
+    fn new(timeout: Duration) -> Self {
+        let now = Instant::now();
+        Self {
+            deadline: now.checked_add(timeout).unwrap_or(now),
+            cancelled: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    fn expired(&self) -> bool {
+        self.cancelled.load(Ordering::Acquire) || Instant::now() >= self.deadline
+    }
+}
+
+struct Request<T> {
+    ticket: Ticket,
+    reply: Sender<Result<T, SessionError>>,
+}
+
+impl<T> Request<T> {
+    fn respond(self, value: Result<T, SessionError>) {
+        let _ = self.reply.send(value);
+    }
+}
 
 enum Command {
-    Connect(Reply<Vec<u8>>),
-    Disconnect(Reply<()>),
+    Connect(Request<Vec<u8>>),
+    Disconnect(Request<()>),
     Read {
         address: u32,
         count: usize,
-        reply: Reply<Vec<u8>>,
+        request: Request<Vec<u8>>,
     },
     Write {
         address: u32,
         data: Vec<u8>,
-        reply: Reply<()>,
+        request: Request<()>,
     },
-    State(Sender<SessionState>),
+    State(Request<SessionState>),
     Shutdown,
 }
 
-/// A clonable command endpoint. It never exposes the underlying XCP master.
+/// Clonable, bounded command endpoint; no caller can access the master/MTA.
 #[derive(Clone)]
 pub struct SessionHandle {
-    commands: Sender<Command>,
+    commands: SyncSender<Command>,
+    timeout: Duration,
 }
 
 impl SessionHandle {
-    fn call<T>(&self, command: impl FnOnce(Reply<T>) -> Command) -> Result<T, SessionError> {
+    /// Configure a command deadline including time waiting in the actor queue.
+    /// A timeout during write means the ECU memory outcome is unknown.
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
+    fn call<T>(&self, command: impl FnOnce(Request<T>) -> Command) -> Result<T, SessionError> {
         let (reply, receiver) = mpsc::channel();
-        self.commands
-            .send(command(reply))
-            .map_err(|_| SessionError::WorkerStopped)?;
-        receiver.recv().map_err(|_| SessionError::WorkerStopped)?
+        let ticket = Ticket::new(self.timeout);
+        let request = Request {
+            ticket: ticket.clone(),
+            reply,
+        };
+        match self.commands.try_send(command(request)) {
+            Ok(()) => {}
+            Err(TrySendError::Full(_)) => return Err(SessionError::QueueFull),
+            Err(TrySendError::Disconnected(_)) => return Err(SessionError::WorkerStopped),
+        }
+        match receiver.recv_timeout(self.timeout) {
+            Ok(result) => result,
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                ticket.cancelled.store(true, Ordering::Release);
+                Err(SessionError::Timeout)
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(SessionError::WorkerStopped),
+        }
     }
 
     pub fn connect(&self) -> Result<Vec<u8>, SessionError> {
@@ -72,38 +137,30 @@ impl SessionHandle {
         self.call(Command::Disconnect)
     }
 
-    /// Read is queued as one atomic MTA + upload operation.
+    /// Queue SET_MTA and all UPLOADs as one non-interleavable transaction.
     pub fn read(&self, address: u32, count: usize) -> Result<Vec<u8>, SessionError> {
-        self.call(|reply| Command::Read {
+        self.call(|request| Command::Read {
             address,
             count,
-            reply,
+            request,
         })
     }
 
-    /// Write is queued as one atomic MTA + download operation.
+    /// Queue SET_MTA and all DOWNLOADs as one non-interleavable transaction.
     pub fn write(&self, address: u32, data: &[u8]) -> Result<(), SessionError> {
-        self.call(|reply| Command::Write {
+        self.call(|request| Command::Write {
             address,
             data: data.to_vec(),
-            reply,
+            request,
         })
     }
 
     pub fn state(&self) -> Result<SessionState, SessionError> {
-        let (reply, receiver) = mpsc::channel();
-        self.commands
-            .send(Command::State(reply))
-            .map_err(|_| SessionError::WorkerStopped)?;
-        receiver.recv().map_err(|_| SessionError::WorkerStopped)
+        self.call(Command::State)
     }
 }
 
-/// Owns the worker thread; dropping this owner gracefully stops the command loop.
-///
-/// Cloned handles stop accepting commands after the actor is dropped. A
-/// transport with an unbounded blocking receive may delay shutdown, so
-/// hardware adapters must enforce receive timeouts.
+/// Owns the actor thread. Dropping it waits for the current bounded I/O call.
 pub struct SessionActor {
     handle: SessionHandle,
     worker: Option<JoinHandle<()>>,
@@ -111,10 +168,18 @@ pub struct SessionActor {
 
 impl SessionActor {
     pub fn spawn<T: CanTransport + 'static>(master: XcpMaster<T>) -> Self {
-        let (commands, receiver) = mpsc::channel();
+        Self::spawn_with_timeout(master, DEFAULT_COMMAND_TIMEOUT)
+    }
+
+    /// Configure the default total deadline for a queued session operation.
+    pub fn spawn_with_timeout<T: CanTransport + 'static>(
+        master: XcpMaster<T>,
+        timeout: Duration,
+    ) -> Self {
+        let (commands, receiver) = mpsc::sync_channel(QUEUE_CAPACITY);
         let worker = thread::spawn(move || run(master, receiver));
         Self {
-            handle: SessionHandle { commands },
+            handle: SessionHandle { commands, timeout },
             worker: Some(worker),
         }
     }
@@ -126,6 +191,8 @@ impl SessionActor {
 
 impl Drop for SessionActor {
     fn drop(&mut self) {
+        // Shutdown is ordered after already-queued operations. Expired
+        // requests are skipped by the worker; transport I/O must be bounded.
         let _ = self.handle.commands.send(Command::Shutdown);
         if let Some(worker) = self.worker.take() {
             let _ = worker.join();
@@ -136,7 +203,11 @@ impl Drop for SessionActor {
 fn is_fatal(error: &XcpError) -> bool {
     matches!(
         error,
-        XcpError::NoResponse | XcpError::Transport(_) | XcpError::InvalidResponse
+        XcpError::NoResponse
+            | XcpError::Transport(_)
+            | XcpError::InvalidResponse
+            | XcpError::UnsupportedCapabilities
+            | XcpError::Protocol(ERR_SEQUENCE)
     )
 }
 
@@ -148,80 +219,110 @@ fn ensure_connected(state: SessionState) -> Result<(), SessionError> {
     }
 }
 
+/// A timed-out in-flight operation invalidates the session even when its
+/// transport eventually returns Ok; the ECU outcome cannot be trusted.
+fn finish<T>(
+    ticket: &Ticket,
+    state: &mut SessionState,
+    result: Result<T, XcpError>,
+    fault_on_error: bool,
+) -> Result<T, SessionError> {
+    if ticket.expired() {
+        *state = SessionState::Faulted;
+        return Err(SessionError::Timeout);
+    }
+    result.map_err(|error| {
+        if fault_on_error || is_fatal(&error) {
+            *state = SessionState::Faulted;
+        }
+        SessionError::Xcp(error)
+    })
+}
+
 fn run<T: CanTransport>(mut master: XcpMaster<T>, commands: Receiver<Command>) {
     let mut state = SessionState::Disconnected;
     let mut last_connect_response = Vec::new();
 
     while let Ok(command) = commands.recv() {
         match command {
-            Command::Connect(reply) => {
-                let result = if state == SessionState::Connected {
-                    Ok(last_connect_response.clone())
+            Command::Connect(request) => {
+                if request.ticket.expired() {
+                    request.respond(Err(SessionError::Timeout));
+                    continue;
+                }
+                if state == SessionState::Connected {
+                    request.respond(Ok(last_connect_response.clone()));
+                    continue;
+                }
+                // A previous timeout may have left an old CTO in the receive
+                // queue. Do not let that reply satisfy a new CONNECT.
+                let result = if state == SessionState::Faulted {
+                    master
+                        .discard_pending()
+                        .and_then(|()| master.connect_until(request.ticket.deadline))
                 } else {
-                    match master.connect() {
-                        Ok(response) => {
-                            last_connect_response = response.clone();
-                            state = SessionState::Connected;
-                            Ok(response)
-                        }
-                        Err(error) => {
-                            state = SessionState::Faulted;
-                            Err(SessionError::Xcp(error))
-                        }
-                    }
+                    master.connect_until(request.ticket.deadline)
                 };
-                let _ = reply.send(result);
+                let result = finish(&request.ticket, &mut state, result, true);
+                if let Ok(ref response) = result {
+                    last_connect_response = response.clone();
+                    state = SessionState::Connected;
+                }
+                request.respond(result);
             }
-            Command::Disconnect(reply) => {
-                let result = if state == SessionState::Disconnected {
-                    Ok(())
-                } else {
-                    match master.disconnect() {
-                        Ok(()) => {
-                            state = SessionState::Disconnected;
-                            last_connect_response.clear();
-                            Ok(())
-                        }
-                        Err(error) => {
-                            state = SessionState::Faulted;
-                            Err(SessionError::Xcp(error))
-                        }
-                    }
-                };
-                let _ = reply.send(result);
+            Command::Disconnect(request) => {
+                if request.ticket.expired() {
+                    request.respond(Err(SessionError::Timeout));
+                    continue;
+                }
+                if state == SessionState::Disconnected {
+                    request.respond(Ok(()));
+                    continue;
+                }
+                let result = master.disconnect_until(request.ticket.deadline);
+                let result = finish(&request.ticket, &mut state, result, true);
+                if result.is_ok() {
+                    state = SessionState::Disconnected;
+                    last_connect_response.clear();
+                }
+                request.respond(result);
             }
             Command::Read {
                 address,
                 count,
-                reply,
+                request,
             } => {
+                if request.ticket.expired() {
+                    request.respond(Err(SessionError::Timeout));
+                    continue;
+                }
                 let result = ensure_connected(state).and_then(|()| {
-                    master.read(address, count).map_err(|error| {
-                        if is_fatal(&error) {
-                            state = SessionState::Faulted;
-                        }
-                        SessionError::Xcp(error)
-                    })
+                    let result = master.read_until(address, count, request.ticket.deadline);
+                    finish(&request.ticket, &mut state, result, false)
                 });
-                let _ = reply.send(result);
+                request.respond(result);
             }
             Command::Write {
                 address,
                 data,
-                reply,
+                request,
             } => {
+                if request.ticket.expired() {
+                    request.respond(Err(SessionError::Timeout));
+                    continue;
+                }
                 let result = ensure_connected(state).and_then(|()| {
-                    master.write(address, &data).map_err(|error| {
-                        if is_fatal(&error) {
-                            state = SessionState::Faulted;
-                        }
-                        SessionError::Xcp(error)
-                    })
+                    let result = master.write_until(address, &data, request.ticket.deadline);
+                    finish(&request.ticket, &mut state, result, false)
                 });
-                let _ = reply.send(result);
+                request.respond(result);
             }
-            Command::State(reply) => {
-                let _ = reply.send(state);
+            Command::State(request) => {
+                if request.ticket.expired() {
+                    request.respond(Err(SessionError::Timeout));
+                } else {
+                    request.respond(Ok(state));
+                }
             }
             Command::Shutdown => break,
         }
