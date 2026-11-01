@@ -1,5 +1,3 @@
-# T-0007 — Safe simulated calibration write, readback and audit
-
 ---
 id: T-0007
 title: Safe simulated calibration write, readback and audit
@@ -12,6 +10,8 @@ github_issue: 10
 depends_on: [T-0003, T-0004, T-0013]
 requirements: [CAL-001, CAL-002, CAL-003, CAL-004, CAL-005, SEC-004]
 ---
+
+# T-0007 — Safe simulated calibration write, readback and audit
 
 ## Context / desired behavior
 
