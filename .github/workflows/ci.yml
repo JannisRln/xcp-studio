@@ -29,3 +29,12 @@ jobs:
       - run: npm install
       - run: npm run build
       - run: npm test
+  docs:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate docs, ticket dependencies and requirement links
+        run: python scripts/check_docs.py
