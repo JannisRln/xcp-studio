@@ -142,7 +142,8 @@ fn short_name<R: Reader>(
     let Some(attr) = entry.attr_value(gimli::DW_AT_name)? else {
         return Ok(None);
     };
-    let text = dwarf.attr_string(unit, attr)?.to_string_lossy()?;
+    let reader = dwarf.attr_string(unit, attr)?;
+    let text = reader.to_string_lossy()?;
     Ok(Some(text.chars().take(512).collect()))
 }
 
