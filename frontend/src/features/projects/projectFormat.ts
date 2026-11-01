@@ -312,13 +312,18 @@ export function reconcileEcuFiles(project: ProjectDocument, observed: readonly O
   warnings: ProjectWarning[];
   blockedSignalIds: string[];
 } {
-  const seen = new Map(observed.map(item => [item.id, item]));
+  const seen = new Map<string, ObservedEcuFile>();
+  const ambiguous = new Set<string>();
+  for (const item of observed) {
+    if (seen.has(item.id)) ambiguous.add(item.id);
+    seen.set(item.id, item);
+  }
   const warnings: ProjectWarning[] = [];
   const blocked = new Set<string>();
   for (const expected of project.ecuFiles) {
     const current = seen.get(expected.id);
     const code = !current ? "MISSING_ECU_FILE"
-      : current.kind !== expected.kind || current.sha256 !== expected.sha256 || current.sizeBytes !== expected.sizeBytes
+      : ambiguous.has(expected.id) || current.kind !== expected.kind || current.sha256 !== expected.sha256 || current.sizeBytes !== expected.sizeBytes
         ? "CHANGED_ECU_FILE" : null;
     if (code !== null) {
       const signalIds = project.signals.filter(s => s.fileId === expected.id).map(s => s.id);
