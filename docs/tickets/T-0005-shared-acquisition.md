@@ -1,11 +1,11 @@
 ---
 id: T-0005
 title: Backend-owned acquisition engine, backpressure and DAQ
-status: in-progress
+status: blocked
 priority: P0
 area: acquisition
-owner: assistant-acquisition-agent
-branch: feat/T-0005-shared-acquisition-polling
+owner: unassigned
+branch: none
 github_issue: 8
 depends_on: [T-0004, T-0012]
 requirements: [XCP-008, MEAS-001, MEAS-002, MEAS-004, MEAS-005, MEAS-006, MEAS-007, MEAS-011, MEAS-012, DIAG-002]
@@ -15,7 +15,7 @@ requirements: [XCP-008, MEAS-001, MEAS-002, MEAS-004, MEAS-005, MEAS-006, MEAS-0
 
 ## Context / desired behavior
 
-The existing /api/xcp/stream remains a legacy per-client polling endpoint. This independent, contract-first phase adds an **additive** backend-owned shared polling acquisition with REST lifecycle and v1 WebSocket subscribers. T-0004 actor and T-0012 REST contract foundations are already merged; their remaining scope does not block this isolated implementation slice. ECU-side DAQ and recording remain follow-ups.
+The existing /api/xcp/stream remains a legacy per-client polling endpoint. Merged [PR #25](https://github.com/JannisRln/xcp-studio/pull/25) added an **additive** backend-owned shared polling acquisition with REST lifecycle and v1 WebSocket subscribers. T-0004 actor and T-0012 REST contract foundations are already merged; their remaining scope does not block this isolated implementation slice. ECU-side DAQ and recording remain follow-ups.
 
 **Desired outcome:** Backend-owned acquisition engine, backpressure and DAQ. Implement according to [product specification](../product-specification.md), [architecture](../architecture.md) and [API contract](../api-contract.md), where applicable.
 
@@ -59,7 +59,7 @@ The existing /api/xcp/stream remains a legacy per-client polling endpoint. This 
 
 ## Evidence and completion
 
-- Implementation PR: shared polling acquisition slice, pending PR URL and CI validation.
-- CI workflow/head SHA: pending.
-- Test/fixture evidence: pending.
-- Known limitations: **not ECU-side DAQ**, no backend recorder or replay of lost messages; the legacy /api/xcp/stream remains per-tab polling for compatibility. Subscriber count capped at 16, broadcast queue at 128 events. Single active acquisition per simulated ECU process; restart replaces the last status. Ticket stays in-progress until DAQ/capability tests are complete.
+- Implementation PR: [#25](https://github.com/JannisRln/xcp-studio/pull/25), backend-owned polling acquisition, bounded subscribers and v1 stream, merged.
+- CI: [run #113](https://github.com/JannisRln/xcp-studio/actions/runs/41291388091), Rust/frontend/docs successful before merge.
+- Tests: shared signal and gap JSON fixtures under contracts/v1/, two-subscriber identical sequence, bounded broadcast lag, invalid config/disconnected session and stop/restart unit tests. **Full physical DAQ and browser E2E not tested.**
+- Known limitations: **not ECU-side DAQ**, no backend recorder or replay of lost messages; the legacy /api/xcp/stream remains per-tab polling for compatibility. Subscriber count capped at 16, broadcast queue at 128 events. Single active acquisition per simulated ECU process; restart replaces the last status. Ticket remains blocked for ECU DAQ/capability negotiation and shared-session follow-up. An independent phase may be claimed after T-0004/T-0012 interfaces are accepted.
