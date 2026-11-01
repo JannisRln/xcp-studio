@@ -1,11 +1,11 @@
 ---
 id: T-0013
 title: Local API security and guarded hardware safety policy
-status: in-progress
+status: ready
 priority: P0
 area: safety
-owner: assistant-security-agent
-branch: feat/T-0013-local-api-guard
+owner: unassigned
+branch: none
 github_issue: 10
 depends_on: []
 requirements: [SEC-001, SEC-002, SEC-003, SEC-005, CAL-006, CAL-007]
@@ -15,7 +15,7 @@ requirements: [SEC-001, SEC-002, SEC-003, SEC-005, CAL-006, CAL-007]
 
 ## Context / desired behavior
 
-The API already binds to loopback. This incremental PR enforces strict loopback Host headers, approved local browser Origin/Fetch Metadata for HTTP and WebSocket, plus 16-KiB WebSocket message/frame limits. It is **not authentication** and does not enable remote access or hardware writes. Remaining per-session rate/connection limits and write gating are tracked in this ticket.
+The API already binds to loopback. Merged PR #29 enforces strict loopback Host headers, approved local browser Origin/Fetch Metadata for HTTP and WebSocket, plus 16-KiB WebSocket message/frame limits. It is **not authentication** and does not enable remote access or hardware writes. Remaining per-session rate/connection limits and write gating are tracked in this ticket.
 
 **Desired outcome:** Local API security and guarded hardware safety policy. Implement according to [product specification](../product-specification.md), [architecture](../architecture.md) and [API contract](../api-contract.md), where applicable.
 
@@ -59,7 +59,7 @@ The API already binds to loopback. This incremental PR enforces strict loopback 
 
 ## Evidence and completion
 
-- Implementation PR: local HTTP/WebSocket origin and Host guard (CI/review pending).
-- CI workflow/head SHA: pending.
-- Test/fixture evidence: pending.
-- Known limitations: no remote authentication/authorization/TLS, no per-client request rate limits, no validated hardware write enablement, no log redaction; T-0013 remains in-progress.
+- Implementation PR: [#29](https://github.com/JannisRln/xcp-studio/pull/29), local HTTP/WS Host, Origin and fetch-site guard, 16 KiB message cap; merged.
+- CI: [run #119](https://github.com/JannisRln/xcp-studio/actions/runs/41292669328) with Rust/frontend/docs successful before merge.
+- Tests: Rust unit tests for authorized local dev Origins, denied external origins/DNS rebinding hosts, cross-site browser fetches and invalid Host ports.
+- Known limitations: local origin policy is **not authentication**; no remote authentication/authorization/TLS, no per-client request rate limits, no validated hardware write enablement, no log redaction; T-0013 remains in-progress.

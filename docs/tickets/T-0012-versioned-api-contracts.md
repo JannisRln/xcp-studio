@@ -1,11 +1,11 @@
 ---
 id: T-0012
 title: Versioned REST and WebSocket contracts with cross-language tests
-status: in-progress
+status: ready
 priority: P0
 area: api
-owner: assistant-api-agent
-branch: feat/T-0012-versioned-api-contracts
+owner: unassigned
+branch: none
 github_issue: 8
 depends_on: []
 requirements: [API-001, API-002, API-003, API-004, DIAG-001]
@@ -15,7 +15,7 @@ requirements: [API-001, API-002, API-003, API-004, DIAG-001]
 
 ## Context / desired behavior
 
-The baseline endpoints are unversioned. This PR adds an additive **v1 HTTP slice** for health, current simulator session and raw memory reads, with typed errors and shared Rust/TypeScript fixtures. Versioned acquisition/stream contracts and separate acquisition ownership remain T-0005 follow-up work.
+The baseline endpoints are unversioned. Merged PR #22 added an additive **v1 HTTP slice** for health, current simulator session and raw memory reads, with typed errors and shared Rust/TypeScript fixtures. Merged PR #25 added shared v1 acquisition lifecycle and WebSocket sample/gap fixtures, and PR #27 added their validated TypeScript consumer; full v1 transport/quality/error unification remains follow-up work.
 
 **Desired outcome:** Versioned REST and WebSocket contracts with cross-language tests. Implement according to [product specification](../product-specification.md), [architecture](../architecture.md) and [API contract](../api-contract.md), where applicable.
 
@@ -25,7 +25,7 @@ The baseline endpoints are unversioned. This PR adds an additive **v1 HTTP slice
 - [ ] Define timestamp, integer precision, address provenance, quality/gap and error codes.
 - [x] Implement server-side runtime validation and TS boundary parsing for the new versioned health/session/read endpoints.
 - [x] Provide additive health/session/read routes with shared fixtures; legacy XCP endpoints retained for existing callers.
-- [ ] Separate control requests from subscribing to a pre-existing acquisition.
+- [x] Separate acquisition creation/stop REST controls from WebSocket subscription to a pre-existing acquisition ID, implemented in PR #25.
 
 ## Non-goals
 
@@ -59,7 +59,7 @@ The baseline endpoints are unversioned. This PR adds an additive **v1 HTTP slice
 
 ## Evidence and completion
 
-- Implementation PR: will be linked after creation; this is a partial API contract slice.
-- CI workflow/head SHA: pending.
-- Test/fixture evidence: pending.
-- Known limitations: v1 does not yet define a shared acquisition subscription or all error categories; per-client legacy WS polling remains. Complete under T-0005 and the remaining scope of T-0012.
+- Implementation PRs: [#22](https://github.com/JannisRln/xcp-studio/pull/22) (v1 health/session/read), [#25](https://github.com/JannisRln/xcp-studio/pull/25) (shared v1 acquisition WS) and [#27](https://github.com/JannisRln/xcp-studio/pull/27) (validated TS consumer), all merged.
+- CI: green PR #25 [run #113](https://github.com/JannisRln/xcp-studio/actions/runs/41291388091) and PR #27 [run #115](https://github.com/JannisRln/xcp-studio/actions/runs/41291904365), plus original PR #22 green checks.
+- Tests: contracts/v1 JSON fixtures validated by Rust server tests and TypeScript Vitest tests; malformed/error payloads, subscriber gap and lifecycle validation covered.
+- Known limitations: shared v1 acquisition WS subscription exists; legacy unversioned per-client polling remains for compatibility. Rich raw/physical quality, exact 64-bit timing, recording and full error-family versioning remain unfinished. Complete under T-0005 and the remaining scope of T-0012.

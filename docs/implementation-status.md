@@ -45,3 +45,22 @@ Legend: DELIVERED = code exists for stated narrow behavior; PARTIAL = only part 
 ## Update rules
 
 Update this file only when a merged implementation and evidence change a capability. Link PR, final SHA, CI and the exact acceptance scenario. Do not move a category to DELIVERED on the basis of an unmerged PR. Tickets contain the operational checklist and current owner; this page summarizes verified capability only.
+
+## Confirmed implementation updates — 2026-11-01
+
+The original table above is a historical baseline. The following merged PRs are newer verified evidence; **they do not imply full feature completion**.
+
+| Ticket / area | Merged evidence | Narrow capability now available | Remaining work |
+| --- | --- | --- | --- |
+| T-0001 CI | [PR #20](https://github.com/JannisRln/xcp-studio/pull/20) | Frontend npm ci + lockfile; Rust Clippy -D warnings; safe auto-pruning of already-merged source branches | Administrator must verify required main branch-protection checks |
+| T-0004 XCP session | [PR #23](https://github.com/JannisRln/xcp-studio/pull/23), [PR #24](https://github.com/JannisRln/xcp-studio/pull/24) | Serialized XCP session actor used by legacy and versioned HTTP/WS handlers; concurrent MTA-safe request tests | Deadline/cancellation, capability negotiation and hardware session profiles |
+| T-0012 versioned APIs | [PR #22](https://github.com/JannisRln/xcp-studio/pull/22), [PR #25](https://github.com/JannisRln/xcp-studio/pull/25) | Versioned health/session/read and acquisition lifecycle/WS subscription, shared Rust/TypeScript JSON fixtures | Complete versioned metadata/quality/calibration API and compatibility policies |
+| T-0005 acquisition | [PR #25](https://github.com/JannisRln/xcp-studio/pull/25) | **One backend-owned XCP polling scheduler**, independent of browser subscriber count; up to 16 WS subscribers, bounded 128-frame fanout, sequence and lag/gap reporting | ECU-side DAQ, durable recording, replay and full signal-quality/timebase semantics |
+| T-0006 measurement UI | [PR #27](https://github.com/JannisRln/xcp-studio/pull/27), [PR #28](https://github.com/JannisRln/xcp-studio/pull/28) | GUI consumes shared acquisition, reconnects after route reload, separates chart pause from backend stop, reports dropped events, exports bounded preview CSV; chart has zoom/pan, unit axes and cursor | Complete browser E2E, raw/physical conversion quality, persistent backend recording, historical replay |
+| T-0013 local security | [PR #29](https://github.com/JannisRln/xcp-studio/pull/29) | Local Host/Origin/Fetch Metadata policy, DNS-rebinding and cross-site browser request mitigation, 16 KiB WS message limits | Authentication for any future remote access, request-rate limits, hardware write gating, diagnostics redaction |
+
+**Validated CI runs:** shared acquisition [#113](https://github.com/JannisRln/xcp-studio/actions/runs/41291388091), frontend integration [#115](https://github.com/JannisRln/xcp-studio/actions/runs/41291904365), chart [#117](https://github.com/JannisRln/xcp-studio/actions/runs/41292351637), origin safety [#119](https://github.com/JannisRln/xcp-studio/actions/runs/41292669328); all Rust/frontend/docs jobs succeeded before the corresponding squash merge.
+
+**Important distinction:** The original `/api/xcp/stream` remains for compatibility and still creates an independent polling loop for each client. The updated GUI uses `/api/v1/acquisitions/{id}/stream`, which subscribes to a shared backend acquisition instead. The backend-owned service is **not** ECU DAQ. Closing the GUI does not stop acquisition; browser CSV is limited to the retained 2,000-frame preview.
+
+The source-controlled ticket index now returns unclaimed remaining scope to READY or BLOCKED after completion of the merged phases. A deleted branch does not remain an active ticket owner. Consult [ticket index](tickets/INDEX.md) and [agent workflow](agent-workflow.md) before launching parallel agents.
