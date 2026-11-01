@@ -85,7 +85,7 @@ describe("uPlot data alignment and decimation", () => {
     expect(x).toContain(29999);
     expect(rpm[x.indexOf(19799)]).toBeNull();
     expect(temp.some(value => value === null)).toBe(true);
-    expect(x.every((value, i) => i === 0 || value > x[i-1])).toBe(true);
+    expect(x.every((value, i) => i === 0 || Number(value) > Number(x[i-1]))).toBe(true);
   });
 
   it("never reports an invalid cursor value as a real reading", () => {

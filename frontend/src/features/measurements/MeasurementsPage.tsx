@@ -64,6 +64,7 @@ export function MeasurementsPage({
     })
     : active;
 
+  const live = acquisition.indicator === "live";
   const showExisting = backendRunning && acquisition.state !== "streaming";
 
   return <div className="workspace-stack live-workspace">
