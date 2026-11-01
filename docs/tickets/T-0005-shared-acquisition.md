@@ -1,11 +1,11 @@
 ---
 id: T-0005
 title: Backend-owned acquisition engine, backpressure and DAQ
-status: blocked
+status: in-progress
 priority: P0
 area: acquisition
-owner: unassigned
-branch: none
+owner: assistant-acquisition-agent
+branch: feat/T-0005-shared-acquisition-polling
 github_issue: 8
 depends_on: [T-0004, T-0012]
 requirements: [XCP-008, MEAS-001, MEAS-002, MEAS-004, MEAS-005, MEAS-006, MEAS-007, MEAS-011, MEAS-012, DIAG-002]
@@ -15,17 +15,17 @@ requirements: [XCP-008, MEAS-001, MEAS-002, MEAS-004, MEAS-005, MEAS-006, MEAS-0
 
 ## Context / desired behavior
 
-Current /api/xcp/stream starts per-client polling and supplies epoch-ms snapshots; it is not shared, recorded or DAQ-based.
+The existing /api/xcp/stream remains a legacy per-client polling endpoint. This independent, contract-first phase adds an **additive** backend-owned shared polling acquisition with REST lifecycle and v1 WebSocket subscribers. T-0004 actor and T-0012 REST contract foundations are already merged; their remaining scope does not block this isolated implementation slice. ECU-side DAQ and recording remain follow-ups.
 
 **Desired outcome:** Backend-owned acquisition engine, backpressure and DAQ. Implement according to [product specification](../product-specification.md), [architecture](../architecture.md) and [API contract](../api-contract.md), where applicable.
 
 ## Scope
 
-- [ ] Create unique backend acquisition ID and validated state machine with start/stop/status operations.
-- [ ] Implement one scheduler or DAQ stream per ECU session and bounded multi-subscriber fanout.
-- [ ] Record monotonic elapsed time, host timestamp semantics, sequence numbers, gaps and drop metrics.
+- [x] Add per-process acquisition IDs and validated start/stop/status HTTP lifecycle with explicit running/stopped/failed state.
+- [x] Use one backend polling scheduler with bounded broadcast and up to 16 independent WebSocket subscribers per acquisition.
+- [x] Include host epoch-ms, process-monotonic elapsed-ms, sequence IDs and subscriber lag events with drop counts.
 - [ ] Support explicit, bounded polling fallback and capability-driven DAQ integration phase.
-- [ ] Handle slow subscribers, closed sockets, disconnect and restart safely.
+- [x] Ensure slow subscribers cannot block sampling, stop acquisition on explicit XCP disconnect, and accept a new acquisition after stop; full reconnect/recovery semantics remain pending.
 
 ## Non-goals
 
@@ -59,7 +59,7 @@ Current /api/xcp/stream starts per-client polling and supplies epoch-ms snapshot
 
 ## Evidence and completion
 
-- Implementation PR / commit: pending.
+- Implementation PR: shared polling acquisition slice, pending PR URL and CI validation.
 - CI workflow/head SHA: pending.
 - Test/fixture evidence: pending.
-- Known limitations and follow-ups: pending.
+- Known limitations: **not ECU-side DAQ**, no backend recorder or replay of lost messages; the legacy /api/xcp/stream remains per-tab polling for compatibility. Subscriber count capped at 16, broadcast queue at 128 events. Single active acquisition per simulated ECU process; restart replaces the last status. Ticket stays in-progress until DAQ/capability tests are complete.
