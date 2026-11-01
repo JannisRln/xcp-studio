@@ -69,7 +69,7 @@ This independently reviewable phase is authorized by the T-0016 work request des
 
 ## Evidence and completion
 
-- Implementation PR / commit: see feature branch and associated T-0016 PR (link entered after PR creation).
+- Implementation PR / commit: [PR #52](https://github.com/JannisRln/xcp-studio/pull/52) (draft) on feature/T-0016-diagnostics-core.
 - CI workflow/head SHA: pending.
 - Test/fixture evidence: Rust in-module fault/redaction/eviction/export tests; browser `diagnosticsModel.test.ts` (test runner/CI verification pending).
 - Known limitations and follow-ups: integrations and end-to-end coverage deferred until dependency/contract review; no backend support download or wire schema.
