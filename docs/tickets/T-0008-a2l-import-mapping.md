@@ -1,11 +1,11 @@
 ---
 id: T-0008
 title: A2L parsing, physical conversion and metadata reconciliation
-status: blocked
+status: in-progress
 priority: P1
 area: a2l
-owner: unassigned
-branch: none
+owner: ChatGPT-A2L-core
+branch: feature/T-0008-a2l-core
 github_issue: 11
 depends_on: [T-0003]
 requirements: [A2L-001, A2L-002, A2L-003, A2L-004, A2L-005, ECU-007]
@@ -21,7 +21,7 @@ No A2L parser or typed metadata reconciliation has been delivered.
 
 ## Scope
 
-- [ ] Evaluate maintained Rust A2L parser and record license/coverage decision.
+- [x] Evaluate maintained Rust A2L parser and record license/coverage decision (see [decision](../a2l-core-phase.md)).
 - [ ] Import MEASUREMENT, CHARACTERISTIC, COMPU_METHOD, RECORD_LAYOUT and needed IF_DATA.
 - [ ] Resolve raw/physical conversions with units, scaling, bounds and rounding.
 - [ ] Compare A2L claims against ELF/DWARF metadata with provenance-preserving conflicts.
@@ -52,6 +52,8 @@ No A2L parser or typed metadata reconciliation has been delivered.
 
 ## Dependencies / handoff
 
+- **Core-only independent phase claimed** on branch feature/T-0008-a2l-core. Full ticket remains blocked on canonical T-0003 metadata integration and T-0012 interface coordination. No DTO, session, UI, or calibration-write changes in this phase.
+
 - Dependencies: T-0003.
 - Linked GitHub issue: [#11](https://github.com/JannisRln/xcp-studio/issues/11).
 - Changes to shared interfaces require contract-first coordination and an ADR if architecture changes.
@@ -59,7 +61,7 @@ No A2L parser or typed metadata reconciliation has been delivered.
 
 ## Evidence and completion
 
-- Implementation PR / commit: pending.
+- Implementation PR / commit: feature/T-0008-a2l-core (PR pending at claim time).
 - CI workflow/head SHA: pending.
-- Test/fixture evidence: pending.
-- Known limitations and follow-ups: pending.
+- Test/fixture evidence: crates/xcp-core/tests/a2l_core.rs and tests/fixtures/t0008-golden.a2l; execution evidence via PR CI.
+- Known limitations and follow-ups: read-only core; only scalar numeric conversions and metadata diagnostics. UI, vendor-specific typed XCP IF_DATA, maps/tables, runtime address validation and contract integration deferred; see [core decision](../a2l-core-phase.md).
