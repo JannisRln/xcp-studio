@@ -1,6 +1,8 @@
 import { defineConfig } from "vite";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  // GitHub Pages hosts project sites below /<repository>/, unlike local Vite.
+  base: mode === "pages" ? "/xcp-studio/" : "/",
   server: {
     proxy: {
       "/api": {
@@ -10,4 +12,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));
