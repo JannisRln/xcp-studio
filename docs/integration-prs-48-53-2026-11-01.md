@@ -17,7 +17,7 @@
 | 5 | #48 / T-0008 | `52685f5867eedb8cac02ed9fa3419d659dfc198e` | [41328663020](https://github.com/JannisRln/xcp-studio/actions/runs/41328663020): all four jobs **success** | Read-only A2L core only; no runtime address authorization / write approval |
 | 6 | #50 / T-0007 | `2d62fd58eed50407e0404a2b21ad13670c41148d` | [41328560359](https://github.com/JannisRln/xcp-studio/actions/runs/41328560359): all four jobs **success** | Mock-only calibration intent; no public write interface, real dispatch, or safety authorization |
 
-Each listed green run is for an **individual feature head**. No combined-six-feature CI has been executed and no claim of combined correctness is made. The original PR descriptions may cite older heads; always refresh before merging.
+Each listed green run is for an **individual feature head**. Their success alone was not combined evidence. A separate combined QA preview has subsequently passed (see below). The original PR descriptions may cite older heads; always refresh before merging.
 
 ## Browser E2E and benchmark evidence
 
@@ -25,6 +25,15 @@ Each listed green run is for an **individual feature head**. No combined-six-fea
 - [Benchmark artifact](https://github.com/JannisRln/xcp-studio/actions/runs/41340881302/artifacts/13097084012): `xcp-uplot-20k-benchmark-windows`, artifact ID `13097084012`, SHA-256 digest `717d1c2129861b0f48f299c1acbc8e5a2da3f03f64f2d8a427a02115f7ee647e`, expires 2027-01-30 under current GitHub retention.
 - [Browser screenshot artifact](https://github.com/JannisRln/xcp-studio/actions/runs/41340881302/artifacts/13097465848): `xcp-live-view-windows`, artifact ID `13097465848`. Earlier stacked-PR #54 baseline artifacts are retained in [CI run 41337943929](https://github.com/JannisRln/xcp-studio/actions/runs/41337943929).
 - These are browser/simulator and synthetic rendering results, **not** ECU DAQ rate, physical CAN throughput, hardware latency, or complete release/calibration E2E.
+
+## Subsequent combined QA result — not a main merge
+
+- [Draft QA PR #59](https://github.com/JannisRln/xcp-studio/pull/59) stages all six source feature heads, plus the **unmerged** blocking-review fix from #56, on current-main base `8014d82a8ef39c85a3c441a93206b605af0d2c71`. Combined QA commit: `e6851c02e544548059932289e6baa817705efacf`.
+- [Windows CI 41342166969](https://github.com/JannisRln/xcp-studio/actions/runs/41342166969) completed **success** on that exact combined QA head: `rust` (format, Clippy, workspace tests), `frontend` (npm ci, build, Vitest), `docs` (validator), `live-view-e2e` (existing simulator/Vite/WS/React plus extended pause/reconnect/CSV/cursor browser scenarios, synthetic 20k benchmark).
+- [Combined QA benchmark JSON](https://github.com/JannisRln/xcp-studio/actions/runs/41342166969/artifacts/13097781270): `xcp-uplot-20k-benchmark-windows`, ID `13097781270`, SHA-256 `f81fb07263fba509e2f5fb1a61b468f90b8df3f6ca3879436c122a8f69ca25e7`.
+- [Combined QA screenshot](https://github.com/JannisRln/xcp-studio/actions/runs/41342166969/artifacts/13098185789): `xcp-live-view-windows`, ID `13098185789`, SHA-256 `f45b85ce09d65ff6bec068a1a4d483d461f7b8dfea2581fa05783df64817b031`. Artifacts are available until **2027-01-30** under current retention.
+- The combined test proves the staged modules compile and the existing Windows automated simulator/browser suites pass together. It **does not** prove end-to-end backend diagnostic producer wiring, authenticated pointer-session reads, A2L/project hydration, durable save, physical ECU behavior or calibration write/readback. Those remain separately blocked.
+- QA #59 remains **draft and must not be merged**: #49's independent review is unresolved and #56 is not merged back, while all six feature PRs lack documented independent approval. No PR in this batch has been merged into `main`.
 
 ## Review and merge blockers
 
