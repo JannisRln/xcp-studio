@@ -369,16 +369,16 @@ fn rejects_mismatched_layout_or_pointee_metadata() {
 fn guards_mapping_regions_and_address_arithmetic() {
     let mut memory = MockMemory::new(identity());
     let image = target(8, TargetEndian::Little);
-    let mut mapping = mapping(8, TargetEndian::Little);
-    mapping.link_region.length = 0;
+    let mut map = mapping(8, TargetEndian::Little);
+    map.link_region.length = 0;
     assert_eq!(
-        solve(&mut memory, &variable(8), &image, &mapping, &[]).unwrap_err(),
+        solve(&mut memory, &variable(8), &image, &map, &[]).unwrap_err(),
         ResolveError::InvalidMapping
     );
-    mapping = mapping(8, TargetEndian::Little);
-    mapping.runtime_region.length = 0x200;
+    map = mapping(8, TargetEndian::Little);
+    map.runtime_region.length = 0x200;
     assert_eq!(
-        solve(&mut memory, &variable(8), &image, &mapping, &[]).unwrap_err(),
+        solve(&mut memory, &variable(8), &image, &map, &[]).unwrap_err(),
         ResolveError::InvalidMapping
     );
 
@@ -406,12 +406,16 @@ fn path_depth_pointer_depth_and_region_count_are_bounded() {
         solve(&mut memory, &variable(4), &image, &mapping, &deep_path).unwrap_err(),
         ResolveError::LimitExceeded
     );
+    memory.put_pointer(0x1020, 0x1200, 4, TargetEndian::Little);
+    for i in 0..MAX_POINTER_HOPS {
+        memory.put_pointer(0x1200 + (i as u64) * 0x10, 0x1210 + (i as u64) * 0x10, 4, TargetEndian::Little);
+    }
     let pointer_path: Vec<_> = (0..MAX_POINTER_HOPS + 1)
-        .map(|_| PathStep::Dereference { pointee: &node })
+        .flat_map(|_| [PathStep::Dereference { pointee: &node }, PathStep::Member("next")])
         .collect();
     assert_eq!(
         solve(&mut memory, &variable(4), &image, &mapping, &pointer_path).unwrap_err(),
-        ResolveError::MemoryFault
+        ResolveError::LimitExceeded
     );
     let too_many = vec![region(0x1000, 0x1000); MAX_MEMORY_REGIONS + 1];
     assert_eq!(
@@ -419,5 +423,5 @@ fn path_depth_pointer_depth_and_region_count_are_bounded() {
             &[], &too_many, 0).unwrap_err(),
         ResolveError::LimitExceeded
     );
-    assert_eq!(memory.reads, 1);
+    assert_eq!(memory.reads, MAX_POINTER_HOPS);
 }
