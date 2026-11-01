@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../core/api";
-import type { Health, SignalDefinition, SignalType } from "../core/api";
-import { addSymbolSignal, defaultSignals } from "../core/signals";
+import type { Health, SignalType } from "../core/api";
+import { AppErrorBoundary } from "./AppErrorBoundary";
+import { addWorkspaceSignal, initialSignalWorkspace, removeWorkspaceSignal, toggleWorkspaceSignal } from "./signalWorkspace";
 import { OverviewPage } from "../features/overview/OverviewPage";
 import { MeasurementsPage } from "../features/measurements/MeasurementsPage";
 import { SymbolBrowser } from "../features/symbols/SymbolBrowser";
@@ -29,25 +30,38 @@ const descriptions: Record<Page, string> = {
 export function App() {
   const [page, setPage] = useState<Page>("Overview");
   const [health, setHealth] = useState<Health | null>(null);
+  const [checking, setChecking] = useState(true);
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [signals, setSignals] = useState<SignalDefinition[]>(defaultSignals);
+  const [workspace, setWorkspace] = useState(initialSignalWorkspace);
+  const { signals, selectedIds } = workspace;
   const [events, setEvents] = useState<string[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const record = useCallback((message: string) =>
     setEvents(previous => [`${new Date().toLocaleTimeString()}  ${message}`, ...previous].slice(0, 100)), []);
   const refresh = useCallback(async () => {
+    setChecking(true);
     try {
       const [server, session] = await Promise.all([api.health(), api.status()]);
       setHealth(server); setConnected(session.connected); setError("");
     } catch (cause) {
       setHealth(null); setConnected(false);
       setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setChecking(false);
     }
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSidebarOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [sidebarOpen]);
 
   const sessionAction = async (action: "connect" | "disconnect") => {
     setBusy(true); setError("");
@@ -59,7 +73,7 @@ export function App() {
     finally { setBusy(false); }
   };
   const addSignal = (name: string, address: number, type: SignalType) => {
-    setSignals(previous => addSymbolSignal(previous, name, address, type));
+    setWorkspace(previous => addWorkspaceSignal(previous, name, address, type));
     record(`Configured signal ${name} at 0x${address.toString(16)}`);
   };
   const navigate = (target: string) => {
@@ -72,7 +86,7 @@ export function App() {
       <div className="studio-brand"><div className="brand-emblem">X</div>
         <div><strong>XCP Studio</strong><span>ENGINEERING WORKSPACE</span></div></div>
       <div className="sidebar-caption">WORKSPACE</div>
-      <nav aria-label="Main navigation">{navigation.map(item =>
+      <nav id="studio-navigation" aria-label="Main navigation">{navigation.map(item =>
         <button key={item.page} className={page === item.page ? "sidebar-link active" : "sidebar-link"}
           onClick={() => navigate(item.page)} title={item.description} aria-current={page === item.page ? "page" : undefined}>
           <span className="sidebar-icon">{item.icon}</span><span>{item.page}</span>
@@ -85,21 +99,24 @@ export function App() {
     <div className="studio-main">
       <header className="studio-topbar">
         <div className="topbar-left"><button className="menu-toggle" onClick={() => setSidebarOpen(value => !value)}
-          aria-label="Toggle navigation">☰</button>
+          aria-label="Toggle navigation" aria-expanded={sidebarOpen} aria-controls="studio-navigation">☰</button>
           <span>Workspace</span><span className="breadcrumb-separator">/</span><strong>{page}</strong></div>
-        <div className="topbar-right"><span className={health ? "health-indicator online" : "health-indicator"}>
-          <span className="connection-light" />API {health ? "Online" : "Offline"}</span>
-          <button className="button small" onClick={() => void refresh()} title="Refresh connection status">↻ Refresh</button>
+        <div className="topbar-right"><span className={health ? "health-indicator online" : "health-indicator"} role="status" aria-live="polite">
+          <span className="connection-light" />API {checking ? "Checking" : health ? "Online" : "Offline"}</span>
+          <button className="button small" disabled={checking} onClick={() => void refresh()} title="Refresh connection status">↻ Refresh</button>
           <span className="user-monogram">XS</span></div>
       </header>
       <main className="studio-content">
         <div className="page-heading"><div><div className="eyebrow">XCP STUDIO / {page.toUpperCase()}</div>
           <h1>{page === "Symbols" ? "Symbol Browser" : page}</h1><p>{descriptions[page]}</p></div>
           <span className="mode-badge">SIMULATION MODE</span></div>
-        {error && <div className="error-banner" role="alert">{error}</div>}
+        {error && <div className="error-banner" role="alert">{error} <button type="button" className="button small" onClick={() => void refresh()}>Retry API</button></div>}
+        <AppErrorBoundary key={page} onRecover={() => void refresh()}>
         {page === "Overview" && <OverviewPage health={health} connected={connected} signals={signals} onNavigate={navigate} />}
         {page === "Measurements" && <MeasurementsPage connected={connected} signals={signals}
-          onRemove={id => setSignals(previous => previous.filter(signal => signal.id !== id))} />}
+          selectedIds={selectedIds}
+          onToggle={id => setWorkspace(previous => toggleWorkspaceSignal(previous, id))}
+          onRemove={id => setWorkspace(previous => removeWorkspaceSignal(previous, id))} />}
         {page === "Symbols" && <SymbolBrowser signals={signals} onAdd={addSignal} />}
         {page === "Connections" && <ConnectionsPage connected={connected} busy={busy}
           onConnect={() => sessionAction("connect")} onDisconnect={() => sessionAction("disconnect")} />}
@@ -112,6 +129,7 @@ export function App() {
             Calibration writes, range validation, readback verification and rollback protection must be implemented before editing is enabled.</div>
           <button className="button" onClick={() => navigate("Connections")}>Inspect ECU memory</button>
         </section>}
+        </AppErrorBoundary>
       </main>
     </div>
   </div>;
