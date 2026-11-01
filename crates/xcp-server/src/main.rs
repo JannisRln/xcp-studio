@@ -36,7 +36,7 @@ struct ElfResult {
     count: usize,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct ApiError {
     error: String,
 }
