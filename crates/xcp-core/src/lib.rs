@@ -70,3 +70,12 @@ pub mod pcan;
 pub mod elf;
 
 pub mod metadata;
+
+/// Bounded, read-only ECU runtime pointer resolution.
+pub mod ecu;
+
+/// Read-only A2L import and conversion core.
+pub mod a2l;
+
+/// Isolated calibration intent core; ECU writes remain disabled.
+pub mod calibration;

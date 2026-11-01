@@ -6,6 +6,7 @@ import {
 } from "../../core/acquisitionV1";
 import { VersionedApiError } from "../../core/apiV1";
 import { PreviewFrameQueue } from "./frameQueue";
+import type { ChartFrame } from "../../components/plotData";
 import {
   freshnessLimitMs, liveIndicator, measuredReceiveHz, recentReceiveTimes,
   reconnectDelayMs, sampleAgeMs, skippedSequences,
@@ -47,7 +48,7 @@ function describeError(cause: unknown): string {
 export function useAcquisition(connected: boolean) {
   const [state, setState] = useState<AcquisitionState>("idle");
   const [status, setStatus] = useState<AcquisitionStatus | null>(null);
-  const [frames, setFrames] = useState<MeasurementFrame[]>([]);
+  const [frames, setFrames] = useState<ChartFrame[]>([]);
   const [latest, setLatest] = useState<MeasurementFrame | null>(null);
   const [error, setError] = useState("");
   const [received, setReceived] = useState(0);
@@ -64,6 +65,7 @@ export function useAcquisition(connected: boolean) {
   const activeId = useRef<string | null>(null);
   const lastSequence = useRef<number | null>(null);
   const pendingDrops = useRef(0);
+  const reconnectBoundary = useRef(false);
   const rateTimes = useRef<number[]>([]);
   const lastReceivedAtRef = useRef<number | null>(null);
   const connectionOpenedAt = useRef<number | null>(null);
@@ -114,6 +116,7 @@ export function useAcquisition(connected: boolean) {
     activeId.current = id;
     lastSequence.current = null;
     pendingDrops.current = 0;
+    reconnectBoundary.current = false;
     rateTimes.current = [];
     queuedFrames.current.clear();
     latestFrameRef.current = null;
@@ -137,7 +140,10 @@ export function useAcquisition(connected: boolean) {
   const attach = useCallback((acquisition: AcquisitionStatus) => {
     detach();
     if (!mounted.current) return;
+    const sameAcquisition = activeId.current === acquisition.acquisition_id;
+    const hadSamples = receivedRef.current > 0;
     resetForAcquisition(acquisition.acquisition_id);
+    if (sameAcquisition && hadSamples) reconnectBoundary.current = true;
     setStatus(acquisition);
     if (acquisition.state !== "running") {
       setState(acquisition.state === "failed" ? "error" : "idle");
@@ -193,8 +199,11 @@ export function useAcquisition(connected: boolean) {
           pendingDrops.current = 0;
           lastSequence.current = event.sequence;
 
-          const frame = eventFrame(event);
+          const frame: ChartFrame = eventFrame(event);
           frame.dropped_since_previous = missing;
+          if (missing > 0 || reconnectBoundary.current)
+            frame.gapBefore = missing; // 0 denotes unquantified reconnect/display interruption.
+          reconnectBoundary.current = false;
           const now = performance.now();
           lastReceivedAtRef.current = now;
           rateTimes.current = recentReceiveTimes(rateTimes.current, now);
@@ -204,6 +213,7 @@ export function useAcquisition(connected: boolean) {
           queueUi();
         } else if (event.type === "gap") {
           pendingDrops.current += event.dropped;
+          reconnectBoundary.current = true;
           setDropped(count => count + event.dropped);
         } else {
           setStatus(previous => previous?.acquisition_id === event.acquisition_id
@@ -368,8 +378,11 @@ export function useAcquisition(connected: boolean) {
 
   const togglePause = useCallback(() => {
     pausedRef.current = !pausedRef.current;
+    // Browser display pause never interrupts the backend. Do not visually join
+    // pre-pause and post-resume values as if intermediate samples were plotted.
+    if (!pausedRef.current && frames.length) reconnectBoundary.current = true;
     setPaused(pausedRef.current);
-  }, []);
+  }, [frames.length]);
 
   const clear = useCallback(() => {
     if (batchTimer.current !== null) {

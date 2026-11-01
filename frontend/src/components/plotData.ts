@@ -1,58 +1,86 @@
 import type { MeasurementFrame, SignalDefinition } from "../core/api";
 
-/** Compact aligned arrays for uPlot; do not send one React element per sample. */
+/** Local visualization-only discontinuity; not an invented wire-contract field. */
+export type ChartFrame = MeasurementFrame & { gapBefore?: number };
+export type PlotColumn = Array<number | null>;
+
+/**
+ * Keep every physical sample at its original host timestamp.
+ * A null-only midpoint is a Canvas line break, never a fabricated ECU value.
+ * uPlot requires null (rather than NaN) to interrupt spanGaps:false series.
+ */
 export function alignedPlotData(
-  frames: readonly MeasurementFrame[],
+  frames: readonly ChartFrame[],
   signals: readonly SignalDefinition[],
   maxPoints = 1200,
-): number[][] {
+): PlotColumn[] {
   if (!Number.isSafeInteger(maxPoints) || maxPoints < 8)
     throw new Error("Minimum chart capacity is eight points");
   if (!signals.length || !frames.length) return [[], ...signals.map(() => [])];
 
-  // uPlot requires ascending X. Duplicate host timestamps are merged.
   const ordered = [...frames].filter(frame => Number.isFinite(frame.timestamp_ms))
-    .sort((a, b) => a.timestamp_ms - b.timestamp_ms);
+    .sort((a, b) => a.timestamp_ms - b.timestamp_ms ||
+      (a.sequence ?? 0) - (b.sequence ?? 0));
   const x: number[] = [];
-  const ys = signals.map(() => [] as number[]);
+  const ys: PlotColumn[] = signals.map(() => []);
+  const boundaries = new Set<number>();
+  let previous: ChartFrame | undefined;
   for (const frame of ordered) {
-    if (x.length && x[x.length - 1] === frame.timestamp_ms) {
-      // A later sequence for the same host millisecond wins.
+    const time = frame.timestamp_ms;
+    if (previous && frame.gapBefore !== undefined && time > previous.timestamp_ms) {
+      x.push(previous.timestamp_ms + (time - previous.timestamp_ms) / 2);
+      for (const y of ys) y.push(null);
+      boundaries.add(x.length - 1);
+    }
+    const last = x.length - 1;
+    if (last >= 0 && x[last] === time) {
+      // A later backend sequence supersedes the same host millisecond.
       x.pop();
       for (const y of ys) y.pop();
+      boundaries.delete(last);
     }
-    x.push(frame.timestamp_ms);
-    // Build a single lookup per frame. Repeated Array.find would grow as
-    // O(frames * signals^2) and is unsuitable for 50–100 live channels.
-    const sampleMap = new Map(frame.samples.map(sample =>
+    x.push(time);
+    const lookup = new Map(frame.samples.map(sample =>
       [sample.address + ":" + sample.name, sample.value] as const));
     for (let index = 0; index < signals.length; index++) {
       const signal = signals[index];
-      const value = sampleMap.get(signal.address + ":" + signal.name);
-      ys[index].push(value !== undefined && Number.isFinite(value) ? value : NaN);
+      const value = lookup.get(signal.address + ":" + signal.name);
+      const valid = value !== undefined && Number.isFinite(value);
+      ys[index].push(valid ? value : null);
+      if (!valid) boundaries.add(x.length - 1);
     }
+    previous = frame;
   }
 
   if (x.length <= maxPoints) return [x, ...ys];
 
-  // Keep the first/last frame, plus min/max of each signal in every bucket.
-  // A single shared index set preserves proper time alignment for all series.
-  const selected = new Set<number>([0, x.length - 1]);
-  const interior = x.length - 2;
+  // Preserve all visible gaps before extrema so decimation never joins across
+  // a missing/invalid interval. In gap-dense data, show the newest contiguous
+  // source window instead of exceeding the Canvas vertex budget.
+  const mandatory = new Set<number>([0, x.length - 1]);
+  for (const boundary of boundaries) mandatory.add(boundary);
+  if (mandatory.size > maxPoints) {
+    const from = x.length - maxPoints;
+    return [x.slice(from), ...ys.map(y => y.slice(from))];
+  }
+
+  const selected = new Set(mandatory);
   const lanes = Math.max(1, signals.length);
-  const bucketCount = Math.max(1, Math.floor((maxPoints - 2) / (2 * lanes)));
-  const bucketSize = Math.ceil(interior / bucketCount);
-  for (let from = 1; from < x.length - 1; from += bucketSize) {
-    const to = Math.min(x.length - 1, from + bucketSize);
-    for (const y of ys) {
-      let min = -1, max = -1;
-      for (let i = from; i < to; i++) {
-        if (!Number.isFinite(y[i])) continue;
-        if (min === -1 || y[i] < y[min]) min = i;
-        if (max === -1 || y[i] > y[max]) max = i;
+  const buckets = Math.floor((maxPoints - mandatory.size) / (2 * lanes));
+  if (buckets > 0) {
+    const size = Math.ceil((x.length - 2) / buckets);
+    for (let from = 1; from < x.length - 1; from += size) {
+      const to = Math.min(x.length - 1, from + size);
+      for (const y of ys) {
+        let min = -1, max = -1;
+        for (let i = from; i < to; i++) {
+          if (y[i] === null) continue;
+          if (min === -1 || y[i]! < y[min]!) min = i;
+          if (max === -1 || y[i]! > y[max]!) max = i;
+        }
+        if (min !== -1) selected.add(min);
+        if (max !== -1) selected.add(max);
       }
-      if (min !== -1) selected.add(min);
-      if (max !== -1) selected.add(max);
     }
   }
   const indices = [...selected].sort((a, b) => a - b);
@@ -61,6 +89,7 @@ export function alignedPlotData(
 
 export type PlotCursor = { time: number; value: number | null };
 
+/** Cursors always report actual received values, never gap placeholders. */
 export function cursorValue(
   frames: readonly MeasurementFrame[],
   signal: SignalDefinition,
@@ -75,5 +104,6 @@ export function cursorValue(
   }
   if (!nearest) return null;
   const sample = nearest.samples.find(s => s.address === signal.address && s.name === signal.name);
-  return { time: nearest.timestamp_ms, value: sample?.value ?? null };
+  return { time: nearest.timestamp_ms,
+    value: sample && Number.isFinite(sample.value) ? sample.value : null };
 }
