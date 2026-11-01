@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../core/api";
 import type { Health, SignalType } from "../core/api";
 import { AppErrorBoundary } from "./AppErrorBoundary";
@@ -38,6 +38,8 @@ export function App() {
   const { signals, selectedIds } = workspace;
   const [events, setEvents] = useState<string[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const initialRoute = useRef(true);
 
   const record = useCallback((message: string) =>
     setEvents(previous => [`${new Date().toLocaleTimeString()}  ${message}`, ...previous].slice(0, 100)), []);
@@ -63,6 +65,14 @@ export function App() {
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [sidebarOpen]);
 
+  useEffect(() => {
+    if (initialRoute.current) {
+      initialRoute.current = false;
+      return;
+    }
+    headingRef.current?.focus();
+  }, [page]);
+
   const sessionAction = async (action: "connect" | "disconnect") => {
     setBusy(true); setError("");
     try {
@@ -73,7 +83,9 @@ export function App() {
     finally { setBusy(false); }
   };
   const addSignal = (name: string, address: number, type: SignalType) => {
-    setWorkspace(previous => addWorkspaceSignal(previous, name, address, type));
+    const updated = addWorkspaceSignal(workspace, name, address, type);
+    if (updated === workspace) return;
+    setWorkspace(updated);
     record(`Configured signal ${name} at 0x${address.toString(16)}`);
   };
   const navigate = (target: string) => {
@@ -108,7 +120,7 @@ export function App() {
       </header>
       <main className="studio-content">
         <div className="page-heading"><div><div className="eyebrow">XCP STUDIO / {page.toUpperCase()}</div>
-          <h1>{page === "Symbols" ? "Symbol Browser" : page}</h1><p>{descriptions[page]}</p></div>
+          <h1 ref={headingRef} tabIndex={-1}>{page === "Symbols" ? "Symbol Browser" : page}</h1><p>{descriptions[page]}</p></div>
           <span className="mode-badge">SIMULATION MODE</span></div>
         {error && <div className="error-banner" role="alert">{error} <button type="button" className="button small" onClick={() => void refresh()}>Retry API</button></div>}
         <AppErrorBoundary key={page} onRecover={() => void refresh()}>
