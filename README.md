@@ -30,7 +30,7 @@ Windows-first ECU measurement and calibration workstation under active developme
 - HTTP API for simulator connect/status/disconnect, raw memory read and typed multi-signal snapshot.
 - WebSocket stream using **per-client polling** of actual simulator memory, not ECU DAQ.
 - ELF symbol inspection and initial DWARF compilation-unit detection.
-- Frontend with simulator read/stream capabilities; a larger modular dashboard is proposed in PR #18 (verify its current GitHub merge state).
+- Frontend with simulator read/stream capabilities; the modular dashboard from PR #18 is merged in main.
 - A Windows PCAN-Basic transport implementation in xcp-core, **not yet** wired as a production backend session.
 
 The simulator seeds u32 1850 at 0x1000 and f32 88.5 at 0x1004. Values remain constant unless explicitly changed. Typed DWARF resolution, pointer chains, A2L, complete calibration write verification, DAQ, durable recordings and Vector adapter support remain work items.
@@ -49,13 +49,13 @@ In a separate terminal:
 
 ~~~sh
 cd frontend
-npm install
+npm ci
 npm run dev
 ~~~
 
 Open the Vite localhost URL. Backend health: http://127.0.0.1:8080/api/health. Vite proxies HTTP and should proxy WebSocket upgrades to xcp-server. See [runbook](docs/runbook.md) and [API contract](docs/api-contract.md).
 
-**Frontend lockfile status:** a committed frontend/package-lock.json is a T-0001 target, not yet present in the baseline. Do not substitute npm ci for npm install until that ticket is implemented.
+**Dependency lockfile:** frontend/package-lock.json is versioned; use npm ci for reproducible frontend dependency installation.
 
 ## Developer setup, formatting and tests
 
@@ -71,6 +71,7 @@ Before committing Rust changes:
 ~~~sh
 cargo fmt --all
 cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ~~~
 
@@ -78,7 +79,7 @@ For frontend changes:
 
 ~~~sh
 cd frontend
-npm install
+npm ci
 npm run build
 npm test
 ~~~
@@ -89,7 +90,7 @@ For documentation/tickets:
 python scripts/check_docs.py
 ~~~
 
-The pre-commit hook **checks** Rust formatting and deliberately does not modify files. Existing CI runs cargo fmt --all inside a **temporary runner before tests**, so it does not commit formatted changes back to GitHub. GitHub API-created commits bypass local hooks; always verify CI on the current head SHA. Clippy, reproducible npm ci and formal required checks are [T-0001](docs/tickets/T-0001-ci-quality-gates.md) work until implemented. See [test strategy](docs/test-strategy.md).
+The pre-commit hook **checks** Rust formatting and deliberately does not modify files. Existing CI runs cargo fmt --all inside a **temporary runner before tests**, so it does not commit formatted changes back to GitHub. GitHub API-created commits bypass local hooks; always verify CI on the current head SHA. CI executes Clippy and npm ci; enabling *required* GitHub branch protection is a separate administrator action described in [branch protection](docs/branch-protection.md). See [test strategy](docs/test-strategy.md).
 
 ## Hardware and calibration safety
 
@@ -99,4 +100,4 @@ Guides: [PCAN-Basic](docs/pcan-basic.md), [simulator](docs/xcp-simulator.md), [s
 
 ## Delivery and contribution policy
 
-One ticket, one independent branch/PR, reviewed interface contract and tests, clear owner and acceptance evidence. Use the [PR template](.github/PULL_REQUEST_TEMPLATE.md). Do not merge pending or failing CI. Do not claim full XCP DAQ, reliable hardware calibration or performance targets without measured evidence. Code documentation and Doxygen comments are written in **English**.
+One ticket, one independent branch/PR, reviewed interface contract and tests, clear owner and acceptance evidence. Use the [PR template](.github/PULL_REQUEST_TEMPLATE.md) and [branch protection policy](docs/branch-protection.md). Do not merge pending or failing CI. Do not claim full XCP DAQ, reliable hardware calibration or performance targets without measured evidence. Code documentation and Doxygen comments are written in **English**.
