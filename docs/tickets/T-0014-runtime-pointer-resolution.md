@@ -68,7 +68,7 @@ The prototype symbol explorer exposes link-time ELF addresses but does not relia
 
 ## Evidence and completion
 
-- Implementation PR / commit: open draft PR linked in handoff after creation; no merge yet.
+- Implementation PR: [#49](https://github.com/JannisRln/xcp-studio/pull/49) (draft, independent core only); no merge yet.
 - CI workflow/head SHA: pending.
 - Test/fixture evidence: `crates/xcp-core/tests/runtime_pointer_resolver.rs` (mock-memory-only); CI pending.
 - Known limitations and follow-ups: independently verified ECU identity/load mapping, session read serialization, stale pointer refresh, runtime expressions, live access eligibility, chart signal mapping and any public contract work remain blocked.
