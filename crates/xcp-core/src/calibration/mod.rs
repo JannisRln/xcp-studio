@@ -646,6 +646,6 @@ mod tests {
         p.raw_type = RawType::U64;
         p.raw_min = RawValue::Unsigned(0);
         p.raw_max = RawValue::Unsigned(u64::MAX);
-        assert_eq!(Preview::prepare(p, Snapshot {identity: identity(), revision: 12, raw: RawValue::Unsigned(1)}, RawValue::Unsigned((1_u64 << 53) + 1), token(), NOW, NOW + 1).unwrap_err(), CalibrationError::PrecisionLoss);
+        assert_eq!(Preview::prepare(p, Snapshot {identity: identity(), revision: 12, raw: RawValue::Unsigned(2000)}, RawValue::Unsigned((1_u64 << 53) + 1), token(), NOW, NOW + 1).unwrap_err(), CalibrationError::PrecisionLoss);
     }
 }
