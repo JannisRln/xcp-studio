@@ -257,12 +257,12 @@ async function captureScreenshot() {
     while (Date.now() < readyDeadline) {
       observation = await evaluate(
         "(() => ({title:document.querySelector('h1')?.textContent||''," +
-        "live:document.body.innerText.includes('Receiving live samples')," +
-        "rpm:document.body.innerText.includes('1,850')," +
-        "coolant:document.body.innerText.includes('88.5')," +
+        "live:(document.body?.innerText||'').includes('Receiving live samples')," +
+        "rpm:(document.body?.innerText||'').includes('1,850')," +
+        "coolant:(document.body?.innerText||'').includes('88.5')," +
         "curves:[...document.querySelectorAll('.timeseries polyline')]" +
         ".filter(line => (line.getAttribute('points')||'').includes(',')).length," +
-        "body:document.body.innerText.slice(0,600)}))()",
+        "body:(document.body?.innerText||'').slice(0,600)}))()",
       );
       if (observation?.title === "Live View" && observation.live &&
           observation.rpm && observation.coolant && observation.curves >= 2) {
@@ -302,8 +302,20 @@ async function captureScreenshot() {
     console.log("SCREENSHOT " + shot);
   } finally {
     if (browser) browser.close();
-    runner.kill();
-    rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+    if (runner.pid && process.platform === "win32") {
+      const killer = spawn("taskkill", ["/PID", String(runner.pid), "/T", "/F"], {
+        windowsHide: true, stdio: "ignore",
+      });
+      await new Promise(done => {
+        killer.once("exit", done);
+        killer.once("error", done);
+      });
+    } else runner.kill();
+    try {
+      rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+    } catch (error) {
+      console.warn("Temporary Edge profile cleanup deferred: " + String(error));
+    }
   }
 }
 
