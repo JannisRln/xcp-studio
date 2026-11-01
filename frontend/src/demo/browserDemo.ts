@@ -72,6 +72,12 @@ export function simulatedValue(address: number, seconds: number): number {
   if (address === 0x1004) {
     return Math.round((87 + 4.8 * Math.sin(seconds * 0.23)) * 10) / 10;
   }
+  if (address === 0x1008) {
+    return Math.round(225 + 70 * Math.sin(seconds * 0.88 + 0.5));
+  }
+  if (address === 0x100c) {
+    return Math.round((48 + 30 * Math.sin(seconds * 0.46 + 1.1)) * 10) / 10;
+  }
   return Math.round((80 + 35 * Math.sin(seconds * 1.3 + address * 0.01)) * 100) / 100;
 }
 
@@ -265,7 +271,7 @@ class DemoWebSocket {
           decodeURIComponent(match[1]) !== run.id) {
         this.readyState = DemoWebSocket.CLOSED;
         this.onerror?.(new Event("error"));
-        this.onclose?.(new CloseEvent("close", { code: 1006 }));
+        this.onclose?.(new Event("close") as CloseEvent);
         return;
       }
       this.run = run;
@@ -285,7 +291,7 @@ class DemoWebSocket {
     this.readyState = DemoWebSocket.CLOSED;
     this.run?.subscribers.delete(this);
     this.run = null;
-    queueMicrotask(() => this.onclose?.(new CloseEvent("close", { code: 1000 })));
+    queueMicrotask(() => this.onclose?.(new Event("close") as CloseEvent));
   }
 }
 
@@ -304,4 +310,20 @@ export function installBrowserDemo(): void {
     return demoFetch(url.pathname, method, input, init);
   };
   window.WebSocket = DemoWebSocket as unknown as typeof WebSocket;
+  // Immediately show an active, animated demo: users can stop/reconfigure it.
+  // This is a browser-local synthetic session, not a physical XCP device.
+  connected = true;
+  void demoFetch("/api/v1/acquisitions", "POST",
+    new URL("/api/v1/acquisitions", location.href), {
+      method: "POST",
+      body: JSON.stringify({
+        interval_ms: 100,
+        signals: [
+          { name: "Engine speed", address: 0x1000, value_type: "u32" },
+          { name: "Coolant temperature", address: 0x1004, value_type: "f32" },
+          { name: "Torque", address: 0x1008, value_type: "f32" },
+          { name: "Throttle", address: 0x100c, value_type: "f32" },
+        ],
+      }),
+    });
 }
