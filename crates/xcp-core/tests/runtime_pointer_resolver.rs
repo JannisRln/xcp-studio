@@ -330,7 +330,7 @@ fn rejects_missing_memory_bad_offsets_and_target_width_overflow() {
         ResolveError::NullPointer
     );
 
-    let mut bad_node = node(4);
+    let mut bad_node = node.clone();
     bad_node.members[1].byte_offset = None;
     memory.put_pointer(0x1020, 0x1200, 4, TargetEndian::Little);
     assert_eq!(
