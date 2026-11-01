@@ -19,18 +19,16 @@ Every automated test needs reproducible input and expected output. Hardware benc
 
 ## 2. Current CI versus target gates
 
-**Currently implemented** (baseline, 2026-11-01):
-- Rust Windows runner: cargo fmt --all **in temporary runner**, then cargo test --workspace.
-- Frontend Windows runner: npm install, npm run build and npm test.
-- Existing workflow triggers pull_request and push to main.
+**CI configuration delivered by T-0001 after this PR merges:**
+- Rust Windows runner: cargo fmt --all in a temporary runner, then cargo fmt --all -- --check, cargo clippy --workspace --all-targets -- -D warnings, and cargo test --workspace.
+- Frontend Windows runner: npm ci with a committed lockfile, npm run build and npm test.
+- Documentation Windows runner: python scripts/check_docs.py, validating frontmatter, index, requirement mappings, dependencies and links.
+- Existing workflow triggers pull_request and push to main. Branch-cleanup maintenance workflow runs on main pushes and removes only verified merged source branches.
 
-**Required additions** (T-0001, not already implemented):
-- cargo clippy --workspace --all-targets -- -D warnings.
-- Committed lockfiles and npm ci.
-- Python docs/ticket index/requirement/link validation.
-- Required branch-protection checks, code review and dependency security review.
-- Browser/server simulator E2E job at MVP release.
-- Formatting policy documentation: CI runner autoformat does not rewrite commits; local hook checks formatting.
+**Separate repository administration and later work:**
+- Enable required checks for rust/frontend/docs and PR review in GitHub's ruleset for main; [branch-protection.md](branch-protection.md) documents these steps. CI jobs by themselves do not establish that the ruleset is active.
+- Add browser/server simulator E2E and hardware bench evidence as later milestone work.
+- Formatting policy: CI runner autoformat does not rewrite commits; local hook checks formatting.
 
 Useful local commands, when dependencies are installed:
 
@@ -46,7 +44,7 @@ cd ..
 python scripts/check_docs.py
 ~~~
 
-If lockfile is not yet committed, npm ci is unavailable. Use npm install only temporarily and do not claim determinism.
+The versioned frontend/package-lock.json is required for npm ci. Keep the lockfile in sync with package.json and review updates.
 
 ## 3. Mandatory fixture set
 
