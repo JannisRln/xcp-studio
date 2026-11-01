@@ -155,3 +155,43 @@ fn unrelated_traffic_respects_deadline() {
         XcpMaster::new(BusyTransport, CanIds::default()).with_response_timeout(Duration::ZERO);
     assert!(matches!(master.connect(), Err(XcpError::NoResponse)));
 }
+
+
+#[test]
+fn empty_and_overflowing_accesses_fail_before_transmission() {
+    let mut master = master();
+    assert!(matches!(master.read(0x1000, 0), Err(XcpError::InvalidParameters)));
+    assert!(matches!(master.write(0x1000, &[]), Err(XcpError::InvalidParameters)));
+    assert!(matches!(master.read(u32::MAX, 2), Err(XcpError::InvalidParameters)));
+    assert!(matches!(master.write(u32::MAX, &[1, 2]), Err(XcpError::InvalidParameters)));
+}
+
+#[test]
+fn last_possible_address_does_not_overflow_simulator_mta() {
+    let ids = CanIds::default();
+    let slave = SimulatedSlave::new(u32::MAX, 1);
+    let mut master = XcpMaster::new(SimulatedTransport::new(slave, ids), ids);
+    master.connect().unwrap();
+    master.write(u32::MAX, &[0xa5]).unwrap();
+    assert_eq!(master.read(u32::MAX, 1).unwrap(), [0xa5]);
+}
+
+#[test]
+fn oversized_classic_can_responses_are_rejected() {
+    use xcp_core::{CanFrame, CanTransport, TransportError};
+
+    struct OversizedResponse;
+    impl CanTransport for OversizedResponse {
+        fn send(&mut self, _frame: CanFrame) -> Result<(), TransportError> {
+            Ok(())
+        }
+        fn receive(&mut self) -> Result<Option<CanFrame>, TransportError> {
+            Ok(Some(CanFrame {
+                id: CanIds::default().response,
+                data: vec![0xff; 9],
+            }))
+        }
+    }
+    let mut master = XcpMaster::new(OversizedResponse, CanIds::default());
+    assert!(matches!(master.connect(), Err(XcpError::InvalidResponse)));
+}

@@ -1,11 +1,11 @@
 ---
 id: T-0004
 title: Serialized XCP session and robust typed read/write
-status: ready
+status: in-progress
 priority: P0
 area: xcp-core
-owner: unassigned
-branch: none
+owner: assistant-xcp-agent
+branch: feat/T-0004-xcp-session-actor
 github_issue: 7
 depends_on: []
 requirements: [XCP-001, XCP-002, XCP-003, XCP-004, XCP-005, XCP-006, XCP-007, XCP-009]
@@ -15,16 +15,16 @@ requirements: [XCP-001, XCP-002, XCP-003, XCP-004, XCP-005, XCP-006, XCP-007, XC
 
 ## Context / desired behavior
 
-Existing XCP master supports a scoped CTO subset and server Mutex session, but no explicit actor/cancellation model or safe concurrent scheduling.
+Existing XCP master supports a scoped CTO subset and the server still owns a Mutex-protected simulator session. This PR introduces a reusable Rust session actor with serialized MTA-sensitive commands, lifecycle and concurrency/fault tests. Migration of the active server to the actor remains follow-up implementation.
 
 **Desired outcome:** Serialized XCP session and robust typed read/write. Implement according to [product specification](../product-specification.md), [architecture](../architecture.md) and [API contract](../api-contract.md), where applicable.
 
 ## Scope
 
-- [ ] Implement explicit session lifecycle and serial command ownership for MTA-dependent operations.
+- [x] Implement a reusable actor session lifecycle and serial command ownership for MTA-dependent operations in xcp-core; server integration remains outstanding.
 - [ ] Validate typed read/write with target endian, address ranges and negotiated capabilities.
 - [ ] Handle disconnect, no-response, CAN filtering and negative XCP responses with structured errors.
-- [ ] Add concurrency, fault-injection, timeout and cancellation tests using simulator transport.
+- [x] Add concurrency and timeout fault-injection tests using simulator transport; cancellation/deadline tests remain outstanding.
 - [ ] Publish stable service interface for acquisition, calibration and HTTP handlers.
 
 ## Non-goals
@@ -59,7 +59,7 @@ Existing XCP master supports a scoped CTO subset and server Mutex session, but n
 
 ## Evidence and completion
 
-- Implementation PR / commit: pending.
+- Implementation PR: pending PR creation; source includes xcp-core/src/session.rs and simulator integration tests.
 - CI workflow/head SHA: pending.
 - Test/fixture evidence: pending.
-- Known limitations and follow-ups: pending.
+- Known limitations: active xcp-server handlers continue to use the existing Mutex until a separately reviewed integration step; no cooperative in-flight cancellation/deadlines/DAQ negotiation yet.

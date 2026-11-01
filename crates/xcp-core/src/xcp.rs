@@ -91,6 +91,10 @@ impl<T: CanTransport> XcpMaster<T> {
                 }
                 continue;
             }
+            // This transport implements classic CAN: responses must fit in one 8-byte CTO.
+            if frame.data.len() > 8 {
+                return Err(XcpError::InvalidResponse);
+            }
             match frame.data.first().copied() {
                 Some(RES) => return Ok(frame.data[1..].to_vec()),
                 Some(ERR) if frame.data.len() >= 2 => {
@@ -129,6 +133,7 @@ impl<T: CanTransport> XcpMaster<T> {
     }
 
     pub fn read(&mut self, address: u32, count: usize) -> Result<Vec<u8>, XcpError> {
+        validate_access_range(address, count)?;
         self.set_mta(address)?;
         let mut result = Vec::with_capacity(count);
         while result.len() < count {
@@ -150,6 +155,7 @@ impl<T: CanTransport> XcpMaster<T> {
     }
 
     pub fn write(&mut self, address: u32, data: &[u8]) -> Result<(), XcpError> {
+        validate_access_range(address, data.len())?;
         self.set_mta(address)?;
         for chunk in data.chunks(6) {
             self.download(chunk)?;
@@ -160,6 +166,15 @@ impl<T: CanTransport> XcpMaster<T> {
     pub fn into_transport(self) -> T {
         self.transport
     }
+}
+
+/// Reject empty requests and ranges that cannot be represented by 32-bit ECU addresses.
+fn validate_access_range(address: u32, count: usize) -> Result<(), XcpError> {
+    let count = u32::try_from(count).map_err(|_| XcpError::InvalidParameters)?;
+    if count == 0 || address.checked_add(count - 1).is_none() {
+        return Err(XcpError::InvalidParameters);
+    }
+    Ok(())
 }
 
 /// A transport that runs the simulated slave immediately after each send.
@@ -295,7 +310,7 @@ impl SimulatedSlave {
                     return vec![ERR, ERR_OUT_OF_RANGE];
                 };
                 self.memory[range].copy_from_slice(&cmd[2..]);
-                self.mta += count as u32;
+                self.mta = self.mta.checked_add(count as u32).unwrap_or(0);
                 vec![RES]
             }
             SET_MTA | UPLOAD | SHORT_UPLOAD | DOWNLOAD | DISCONNECT => vec![ERR, ERR_CMD_SYNTAX],
@@ -312,7 +327,7 @@ impl SimulatedSlave {
         };
         let mut response = vec![RES];
         response.extend_from_slice(&self.memory[range]);
-        self.mta = address + count as u32;
+        self.mta = address.checked_add(count as u32).unwrap_or(0);
         response
     }
 }
