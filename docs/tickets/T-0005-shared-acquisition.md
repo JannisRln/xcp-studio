@@ -8,7 +8,7 @@ owner: unassigned
 branch: none
 github_issue: 8
 depends_on: [T-0004, T-0012]
-requirements: [MEAS-001, MEAS-002, MEAS-004, MEAS-005, MEAS-006, MEAS-007, MEAS-011, MEAS-012, DIAG-002]
+requirements: [XCP-008, MEAS-001, MEAS-002, MEAS-004, MEAS-005, MEAS-006, MEAS-007, MEAS-011, MEAS-012, DIAG-002]
 ---
 
 # T-0005 — Backend-owned acquisition engine, backpressure and DAQ
