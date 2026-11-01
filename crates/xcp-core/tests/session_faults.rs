@@ -307,11 +307,19 @@ fn negative_sequence_error_is_fatal_but_access_denied_is_not() {
     ));
     assert_eq!(session.state().unwrap(), SessionState::Connected);
     assert_eq!(session.read(0x1000, 1).unwrap(), vec![0]);
+    // A writable slave checks the actual boundary; a read-only slave
+    // intentionally rejects DOWNLOAD before it inspects the target address.
+    let actor = SessionActor::spawn(XcpMaster::new(
+        SimulatedTransport::new(SimulatedSlave::new(0x1000, 8), CanIds::default()),
+        CanIds::default(),
+    ));
+    let writable_session = actor.handle();
+    writable_session.connect().unwrap();
     assert!(matches!(
-        session.write(0x1007, &[1, 2]),
+        writable_session.write(0x1007, &[1, 2]),
         Err(SessionError::Xcp(XcpError::Protocol(ERR_OUT_OF_RANGE)))
     ));
-    assert_eq!(session.state().unwrap(), SessionState::Connected);
+    assert_eq!(writable_session.state().unwrap(), SessionState::Connected);
 }
 
 struct IncompatibleConnect {
