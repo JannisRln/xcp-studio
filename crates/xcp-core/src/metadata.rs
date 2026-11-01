@@ -15,6 +15,7 @@ const MAX_TYPE_DEPTH: usize = 16;
 const MAX_MEMBERS: usize = 256;
 const MAX_VARIABLES: usize = 50_000;
 const MAX_EXPANDED_TYPES: usize = 100_000;
+const MAX_LOCATION_OPERATIONS: usize = 16;
 
 /// Target byte order encoded by the ELF, independent of the host machine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -126,6 +127,83 @@ struct Die {
 
 fn numeric<R: Reader>(entry: &gimli::DebuggingInformationEntry<R>, name: gimli::DwAt) -> Result<Option<u64>, gimli::Error> {
     Ok(entry.attr(name)?.and_then(|attr| attr.udata_value()))
+}
+
+/// Interpret integer DWARF attributes without treating signed negative values as offsets.
+fn scalar<R: Reader>(
+    entry: &gimli::DebuggingInformationEntry<R>,
+    name: gimli::DwAt,
+) -> Result<Option<i128>, gimli::Error> {
+    Ok(match entry.attr_value(name)? {
+        Some(AttributeValue::Sdata(value)) => Some(i128::from(value)),
+        Some(attribute) => attribute.udata_value().map(i128::from),
+        None => None,
+    })
+}
+
+fn extent_from_bounds(lower: i128, upper: i128) -> Option<u64> {
+    upper
+        .checked_sub(lower)
+        .and_then(|difference| difference.checked_add(1))
+        .and_then(|extent| u64::try_from(extent).ok())
+}
+
+/// DW_AT_count is an extent; DW_AT_upper_bound is an inclusive index.
+/// An explicit lower bound must be subtracted before computing the extent.
+/// For C-style subranges without a lower bound, DWARF defaults to zero.
+fn subrange_count<R: Reader>(
+    entry: &gimli::DebuggingInformationEntry<R>,
+) -> Result<Option<u64>, gimli::Error> {
+    if let Some(count) = numeric(entry, gimli::DW_AT_count)? {
+        return Ok(Some(count));
+    }
+    let Some(upper) = scalar(entry, gimli::DW_AT_upper_bound)? else {
+        return Ok(None);
+    };
+    let lower = scalar(entry, gimli::DW_AT_lower_bound)?.unwrap_or(0);
+    Ok(extent_from_bounds(lower, upper))
+}
+
+/// Decode only a single constant member-offset operation. DW_OP_plus_uconst
+/// operates on the implicit containing-object address for a member attribute.
+/// Register/frame calculations, dereferences, multiple operations and oversized
+/// expressions cannot be promoted to a static member offset.
+fn constant_member_expression<R: Reader>(
+    expression: gimli::Expression<R>,
+    encoding: gimli::Encoding,
+) -> Result<Option<u64>, gimli::Error> {
+    let mut operations = expression.operations(encoding);
+    let mut offset = None;
+    for index in 0..MAX_LOCATION_OPERATIONS {
+        match operations.next()? {
+            None => return Ok(offset),
+            Some(operation) if index == 0 => {
+                offset = match operation {
+                    Operation::PlusConstant { value } | Operation::UnsignedConstant { value } => {
+                        Some(value)
+                    }
+                    Operation::SignedConstant { value } => u64::try_from(value).ok(),
+                    _ => None,
+                };
+            }
+            Some(_) => return Ok(None),
+        }
+    }
+    Ok(None)
+}
+
+fn member_location<R: Reader>(
+    entry: &gimli::DebuggingInformationEntry<R>,
+    unit: &gimli::Unit<R>,
+) -> Result<Option<u64>, gimli::Error> {
+    match entry.attr_value(gimli::DW_AT_data_member_location)? {
+        Some(AttributeValue::Exprloc(expr)) => {
+            constant_member_expression(expr, unit.encoding())
+        }
+        Some(AttributeValue::Sdata(value)) => Ok(u64::try_from(value).ok()),
+        Some(value) => Ok(value.udata_value()),
+        None => Ok(None),
+    }
 }
 
 fn unit_reference<R: Reader>(
@@ -255,11 +333,17 @@ fn resolve_type(
                     .filter(|child| child.parent == Some(id) && child.tag == gimli::DW_TAG_member)
                     .collect();
                 members.sort_by_key(|m| m.id);
-                for member in members.into_iter().take(MAX_MEMBERS) {
+                for member in members {
+                    let descriptor = resolve_type(member.type_id, dies, visiting, depth + 1, remaining);
+                    let byte_offset = match (member.member_offset, desc.byte_size, descriptor.byte_size) {
+                        (Some(offset), Some(container_size), Some(member_size))
+                            if offset.checked_add(member_size).is_none_or(|end| end > container_size) => None,
+                        (offset, _, _) => offset,
+                    };
                     desc.members.push(TypeMember {
                         name: member.name.clone().unwrap_or_else(|| "<anonymous>".into()),
-                        byte_offset: member.member_offset,
-                        descriptor: resolve_type(member.type_id, dies, visiting, depth + 1, remaining),
+                        byte_offset,
+                        descriptor,
                     });
                 }
             }
@@ -323,7 +407,10 @@ pub fn inspect_typed_dwarf(bytes: &[u8]) -> Result<TypedDwarf, MetadataError> {
             Some(section) => section.uncompressed_data()?.into_owned(),
             None => Vec::new(),
         };
-        Ok::<_, object::Error>(EndianRcSlice::new(Rc::from(bytes), endian))
+        if bytes.len() > MAX_ELF_SIZE {
+            return Err(MetadataError::LimitExceeded);
+        }
+        Ok::<_, MetadataError>(EndianRcSlice::new(Rc::from(bytes), endian))
     })?;
     let mut units = dwarf.units();
     let mut total_dies = 0_usize;
@@ -335,6 +422,7 @@ pub fn inspect_typed_dwarf(bytes: &[u8]) -> Result<TypedDwarf, MetadataError> {
         let mut depth = 0_isize;
         let mut parents: Vec<u64> = Vec::new();
         let mut dies = HashMap::new();
+        let mut member_counts = HashMap::<u64, usize>::new();
         let mut variables = Vec::new();
         let mut unit_name = None;
         while let Some((delta, entry)) = cursor.next_dfs()? {
@@ -356,20 +444,36 @@ pub fn inspect_typed_dwarf(bytes: &[u8]) -> Result<TypedDwarf, MetadataError> {
                 tag: entry.tag(),
                 name: short_name(&dwarf, &unit, entry)?,
                 type_id: unit_reference(entry)?,
-                byte_size: numeric(entry, gimli::DW_AT_byte_size)?,
-                encoding: numeric(entry, gimli::DW_AT_encoding)?,
-                count: match numeric(entry, gimli::DW_AT_count)? {
-                    Some(count) => Some(count),
-                    None => numeric(entry, gimli::DW_AT_upper_bound)?
-                        .and_then(|upper| upper.checked_add(1)),
+                byte_size: match numeric(entry, gimli::DW_AT_byte_size)? {
+                    Some(size) => Some(size),
+                    None if entry.tag() == gimli::DW_TAG_pointer_type => {
+                        Some(u64::from(unit.encoding().address_size))
+                    }
+                    None => None,
                 },
-                member_offset: numeric(entry, gimli::DW_AT_data_member_location)?,
+                encoding: numeric(entry, gimli::DW_AT_encoding)?,
+                count: subrange_count(entry)?,
+                member_offset: if entry.tag() == gimli::DW_TAG_member {
+                    member_location(entry, &unit)?
+                } else {
+                    None
+                },
                 location: if entry.tag() == gimli::DW_TAG_variable {
                     location(entry, &unit)?
                 } else {
                     AddressProvenance::Unavailable
                 },
             };
+            if die.tag == gimli::DW_TAG_member {
+                let Some(parent) = die.parent else {
+                    return Err(MetadataError::LimitExceeded);
+                };
+                let count = member_counts.entry(parent).or_insert(0);
+                *count += 1;
+                if *count > MAX_MEMBERS {
+                    return Err(MetadataError::LimitExceeded);
+                }
+            }
             if die.tag == gimli::DW_TAG_compile_unit {
                 unit_name = die.name.clone();
             }
@@ -486,5 +590,60 @@ mod tests {
         nodes.insert(1, die(1, gimli::DW_TAG_array_type, "unknown_length", None));
         let desc = resolve_type(Some(1), &nodes, &mut HashSet::new(), 0, &mut 1024);
         assert_eq!(desc.element_count, None);
+    }
+
+    #[test]
+    fn member_expressions_accept_only_static_offsets() {
+        let encoding = gimli::Encoding {
+            format: gimli::Format::Dwarf32,
+            version: 4,
+            address_size: 8,
+        };
+        let decode = |bytes: &[u8]| {
+            constant_member_expression(
+                gimli::Expression(gimli::EndianSlice::new(bytes, RunTimeEndian::Little)),
+                encoding,
+            )
+        };
+        // DW_OP_plus_uconst 8, DW_OP_constu 42, and DW_OP_consts -1.
+        assert_eq!(decode(&[0x23, 0x08]).unwrap(), Some(8));
+        assert_eq!(decode(&[0x10, 0x2a]).unwrap(), Some(42));
+        assert_eq!(decode(&[0x11, 0x7f]).unwrap(), None);
+        // Runtime dereference must not become a static member offset.
+        assert_eq!(decode(&[0x23, 0x08, 0x06]).unwrap(), None);
+        // Truncated ULEB128 is invalid DWARF, not a zero offset.
+        assert!(decode(&[0x23, 0x80]).is_err());
+    }
+
+    #[test]
+    fn subranges_use_inclusive_bounds_without_overflow() {
+        assert_eq!(extent_from_bounds(0, 2), Some(3));
+        assert_eq!(extent_from_bounds(5, 8), Some(4));
+        assert_eq!(extent_from_bounds(-3, 2), Some(6));
+        assert_eq!(extent_from_bounds(4, 3), Some(0));
+        assert_eq!(extent_from_bounds(i128::MIN, i128::MAX), None);
+        assert_eq!(extent_from_bounds(-1, i128::MAX), None);
+    }
+
+    #[test]
+    fn rejects_member_offsets_outside_aggregate_size() {
+        let mut nodes = HashMap::new();
+        let mut field = die(1, gimli::DW_TAG_base_type, "u32", None);
+        field.byte_size = Some(4);
+        nodes.insert(1, field);
+        let mut structure = die(2, gimli::DW_TAG_structure_type, "Layout", None);
+        structure.byte_size = Some(8);
+        nodes.insert(2, structure);
+        let mut good = die(3, gimli::DW_TAG_member, "good", Some(1));
+        good.parent = Some(2);
+        good.member_offset = Some(4);
+        nodes.insert(3, good);
+        let mut invalid = die(4, gimli::DW_TAG_member, "invalid", Some(1));
+        invalid.parent = Some(2);
+        invalid.member_offset = Some(u64::MAX);
+        nodes.insert(4, invalid);
+        let layout = resolve_type(Some(2), &nodes, &mut HashSet::new(), 0, &mut 1024);
+        assert_eq!(layout.members[0].byte_offset, Some(4));
+        assert_eq!(layout.members[1].byte_offset, None);
     }
 }
