@@ -474,7 +474,7 @@ mod tests {
         let mut elt = die(3, gimli::DW_TAG_base_type, "u8", None);
         elt.byte_size = Some(1);
         nodes.insert(3, elt);
-        let desc = resolve_type(Some(2), &nodes, &mut HashSet::new(), 0);
+        let desc = resolve_type(Some(2), &nodes, &mut HashSet::new(), 0, &mut 1024);
         assert_eq!(desc.kind, TypeKind::Array);
         assert_eq!(desc.element_count, None);
         assert_eq!(desc.byte_size, None);
