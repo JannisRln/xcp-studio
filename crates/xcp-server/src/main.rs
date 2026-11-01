@@ -437,8 +437,11 @@ mod snapshot_tests {
                 count: 4,
             }),
         )
-        .await
-        .expect_err("disconnected actor must reject reads");
+        .await;
+        let failure = match failure {
+            Ok(_) => panic!("disconnected actor must reject reads"),
+            Err(error) => error,
+        };
         assert!(failure.1 .0.error.contains("not connected"));
     }
 
