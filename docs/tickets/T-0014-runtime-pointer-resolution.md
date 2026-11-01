@@ -1,5 +1,3 @@
-# T-0014 — Bounded runtime pointer-chain resolver
-
 ---
 id: T-0014
 title: Bounded runtime pointer-chain resolver
@@ -12,6 +10,8 @@ github_issue: 6
 depends_on: [T-0003, T-0004]
 requirements: [ECU-009]
 ---
+
+# T-0014 — Bounded runtime pointer-chain resolver
 
 ## Context / desired behavior
 
