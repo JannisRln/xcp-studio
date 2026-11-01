@@ -442,6 +442,44 @@ mod tests {
     }
 
     #[test]
+    fn wire_fixture_matches_serialized_sample_and_gap_events() {
+        let sample = AcquisitionEvent::Samples {
+            schema_version: 1,
+            acquisition_id: "acq-1".into(),
+            sequence: 1,
+            timestamp_ms: 1761980000000,
+            monotonic_elapsed_ms: 20,
+            dropped_since_previous: 0,
+            samples: vec![
+                SnapshotSample {
+                    name: "Engine speed".into(),
+                    address: 4096,
+                    value: 1850.0,
+                },
+                SnapshotSample {
+                    name: "Coolant".into(),
+                    address: 4100,
+                    value: 88.5,
+                },
+            ],
+        };
+        let expected: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../contracts/v1/acquisition-sample.json"
+        )).unwrap();
+        assert_eq!(serde_json::to_value(sample).unwrap(), expected);
+
+        let gap = AcquisitionEvent::Gap {
+            schema_version: 1,
+            acquisition_id: "acq-1".into(),
+            dropped: 11,
+        };
+        let expected: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../contracts/v1/acquisition-gap.json"
+        )).unwrap();
+        assert_eq!(serde_json::to_value(gap).unwrap(), expected);
+    }
+
+    #[test]
     fn validates_interval_names_addresses_and_signal_count() {
         let mut value = config();
         assert!(value.validate().is_ok());
