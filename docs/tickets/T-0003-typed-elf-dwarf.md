@@ -1,11 +1,11 @@
 ---
 id: T-0003
 title: Typed ELF/DWARF metadata and location provenance
-status: ready
+status: review
 priority: P0
 area: ecu-metadata
-owner: unassigned
-branch: none
+owner: chatgpt-ecu-metadata
+branch: feature/T-0003-typed-dwarf-metadata
 github_issue: 6
 depends_on: []
 requirements: [ECU-001, ECU-002, ECU-003, ECU-004, ECU-005, ECU-006, ECU-008, ECU-010]
@@ -21,9 +21,9 @@ ELF symbol inspection and a DWARF compilation-unit summary exist; the typed vari
 
 ## Scope
 
-- [ ] Introduce typed variable descriptors for primitives, enums, typedefs, arrays, structs/unions, members and pointers.
-- [ ] Represent compile-unit origin, target endian/width/alignment, link-time location and runtime resolution state.
-- [ ] Bound DWARF expression interpretation; report unsupported, optimized-out or ambiguous locations explicitly.
+- [x] Introduce typed variable descriptors for primitives, enums, typedefs, arrays, structs/unions, members and pointers.
+- [x] Represent compile-unit origin, target endian/width/alignment, link-time location and runtime resolution state.
+- [x] Bound DWARF expression interpretation; report unsupported, optimized-out or ambiguous locations explicitly.
 - [ ] Build synthetic ELF/DWARF fixtures with and without debug data and invalid inputs.
 - [ ] Expose stable metadata DTOs only after contract agreement with T-0012.
 
@@ -59,7 +59,7 @@ ELF symbol inspection and a DWARF compilation-unit summary exist; the typed vari
 
 ## Evidence and completion
 
-- Implementation PR / commit: pending.
-- CI workflow/head SHA: pending.
-- Test/fixture evidence: pending.
-- Known limitations and follow-ups: pending.
+- Implementation PR / commit: this branch; PR pending assignment.
+- CI workflow/head SHA: pending (do not claim acceptance before CI).
+- Unit tests: `metadata::tests` validate malformed input, member offsets, recursive aliases and array overflow. Real compiled DWARF/stripped fixtures and end-to-end type acceptance are still pending.
+- Known limitations: read-only crate API, no public REST schema change, unresolved static/runtime mapping, no arbitrary expression execution, no cross-unit type resolution, and no ECU pointer dereference. Member locations requiring expressions are marked unknown.

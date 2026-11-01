@@ -56,3 +56,4 @@ pub mod session;
 pub mod pcan;
 
 pub mod elf;
+pub mod metadata;
