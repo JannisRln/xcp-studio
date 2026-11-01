@@ -275,7 +275,13 @@ fn run<T: CanTransport>(mut master: XcpMaster<T>, commands: Receiver<Command>) {
                     request.respond(Ok(()));
                     continue;
                 }
-                let result = master.disconnect_until(request.ticket.deadline);
+                let result = if state == SessionState::Faulted {
+                    master
+                        .discard_pending()
+                        .and_then(|()| master.disconnect_until(request.ticket.deadline))
+                } else {
+                    master.disconnect_until(request.ticket.deadline)
+                };
                 let result = finish(&request.ticket, &mut state, result, true);
                 if result.is_ok() {
                     state = SessionState::Disconnected;
