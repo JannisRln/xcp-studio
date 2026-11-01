@@ -2,6 +2,7 @@
 //! CPU UI construction and inter-frame pacing do not include a GPU-present timestamp.
 
 use serde_json::{json, Value};
+use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
 const ITERATIONS: usize = 80;
@@ -15,11 +16,24 @@ pub struct BenchRun {
     prior_frame_render_cpu_ms: Vec<f64>,
     intervals_ms: Vec<f64>,
     click_to_next_update_ms: Vec<f64>,
+    worker_dispatch_to_ui_ms: Vec<f64>,
+    worker_probe: Receiver<Instant>,
     queued_probe: Option<Instant>,
 }
 
 impl BenchRun {
     pub fn new(size: usize) -> Self {
+        // The callback must remain responsive while the two plots are being
+        // rebuilt. This measures task delivery from a worker, not device input.
+        let (tx, rx) = mpsc::sync_channel(4);
+        std::thread::spawn(move || {
+            for _ in 0..80 {
+                if tx.send(Instant::now()).is_err() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(16));
+            }
+        });
         Self {
             size,
             started: Instant::now(),
@@ -28,6 +42,8 @@ impl BenchRun {
             prior_frame_render_cpu_ms: Vec::with_capacity(ITERATIONS),
             intervals_ms: Vec::with_capacity(ITERATIONS),
             click_to_next_update_ms: Vec::new(),
+            worker_dispatch_to_ui_ms: Vec::new(),
+            worker_probe: rx,
             queued_probe: None,
         }
     }
@@ -42,6 +58,11 @@ impl BenchRun {
                 .push(frame_start.duration_since(last).as_secs_f64() * 1_000.0);
         }
         self.last_frame = Some(frame_start);
+        // Non-blocking drain: the UI cannot wait on a worker or an ECU.
+        while let Ok(sent_at) = self.worker_probe.try_recv() {
+            self.worker_dispatch_to_ui_ms
+                .push(Instant::now().saturating_duration_since(sent_at).as_secs_f64() * 1_000.0);
+        }
         if let Some(clicked) = self.queued_probe {
             if frame_start >= clicked {
                 self.click_to_next_update_ms
@@ -81,7 +102,8 @@ impl BenchRun {
             "previousFrameCpuIncludingRenderingMs": percentiles(&self.prior_frame_render_cpu_ms),
             "frameIntervalMs": percentiles(&self.intervals_ms),
             "clickToNextUpdateProxyMs": percentiles(&self.click_to_next_update_ms),
-            "renderingLimitation": "App::ui timing excludes GPU work; eframe previous-frame CPU usage includes rendering CPU but excludes vsync wait and GPU present. OS input timestamp is NOT instrumented. FPS is frame pacing, not GPU completion. Do not compare these fields directly to browser update-to-second-rAF or ECU throughput."
+            "workerDispatchToUiCallbackMs": percentiles(&self.worker_dispatch_to_ui_ms),
+            "renderingLimitation": "App::ui timing excludes GPU work; eframe previous-frame CPU usage includes rendering CPU but excludes vsync wait and GPU present. Worker dispatch measures event-loop responsiveness, NOT device input or display scanout. OS input timestamp is NOT instrumented. FPS is frame pacing, not GPU completion. Do not compare these fields directly to browser update-to-second-rAF or ECU throughput."
         })
     }
 }
