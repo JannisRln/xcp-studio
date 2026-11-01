@@ -1,5 +1,3 @@
-# T-0016 — Structured transport/acquisition diagnostics and support bundles
-
 ---
 id: T-0016
 title: Structured transport/acquisition diagnostics and support bundles
@@ -12,6 +10,8 @@ github_issue: 13
 depends_on: [T-0004, T-0005]
 requirements: [DIAG-003, DIAG-004]
 ---
+
+# T-0016 — Structured transport/acquisition diagnostics and support bundles
 
 ## Context / desired behavior
 
