@@ -20,10 +20,16 @@ export function TimeSeriesChart({ frames, signals, height = 320, title = "Time s
   const series = useMemo(() => signals.filter(s => !hidden.includes(s.id)).map(signal =>
     ({ signal, points: chartPoints(frames, signal) })), [frames, signals, hidden]);
   const all = series.flatMap(item => item.points);
-  const minTime = all.length ? Math.min(...all.map(p => p.t)) : 0;
-  const maxTime = all.length ? Math.max(...all.map(p => p.t)) : 1;
-  const minValue = all.length ? Math.min(...all.map(p => p.y)) : 0;
-  const maxValue = all.length ? Math.max(...all.map(p => p.y)) : 1;
+  const bounds = all.reduce((result, point) => ({
+    minTime: Math.min(result.minTime, point.t),
+    maxTime: Math.max(result.maxTime, point.t),
+    minValue: Math.min(result.minValue, point.y),
+    maxValue: Math.max(result.maxValue, point.y),
+  }), { minTime: Infinity, maxTime: -Infinity, minValue: Infinity, maxValue: -Infinity });
+  const minTime = all.length ? bounds.minTime : 0;
+  const maxTime = all.length ? bounds.maxTime : 1;
+  const minValue = all.length ? bounds.minValue : 0;
+  const maxValue = all.length ? bounds.maxValue : 1;
   const spanTime = Math.max(1, maxTime - minTime);
   const spanValue = Math.max(0.0001, maxValue - minValue);
   const low = minValue - spanValue * 0.1;
