@@ -38,3 +38,18 @@ jobs:
           python-version: '3.12'
       - name: Validate docs, ticket dependencies and requirement links
         run: python scripts/check_docs.py
+
+  generate-lockfile-for-review:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Resolve lockfile once for review
+        working-directory: frontend
+        run: npm install --package-lock-only --ignore-scripts --no-audit
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-package-lock
+          path: frontend/package-lock.json
