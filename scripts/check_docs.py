@@ -36,7 +36,7 @@ REQUIRED_SECTIONS = [
     "Evidence and completion",
 ]
 ID_PATTERN = re.compile(r"T-\d{4}")
-REQ_PATTERN = re.compile(r"[A-Z]+-\d{3}")
+REQ_PATTERN = re.compile(r"[A-Z][A-Z0-9]*-\d{3}")
 LINK_PATTERN = re.compile(r"(?<!!)\[[^\]\n]+\]\(([^)]+)\)")
 
 
