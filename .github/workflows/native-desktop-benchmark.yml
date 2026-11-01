@@ -1,0 +1,34 @@
+name: Native desktop Windows benchmark
+on:
+  pull_request:
+    paths:
+      - "crates/xcp-desktop/**"
+      - ".github/workflows/native-desktop-benchmark.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-gui-benchmark:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check Rust format
+        run: cargo fmt --all -- --check
+      - name: Lint native crate
+        run: cargo clippy -p xcp-desktop --all-targets -- -D warnings
+      - name: Test native crate
+        run: cargo test -p xcp-desktop
+      - name: Execute native Release app and capture actual Windows window
+        shell: pwsh
+        run: pwsh -File crates/xcp-desktop/scripts/windows-benchmark.ps1 -WaitSeconds 180
+      - name: Upload actual outputs only (never generated screenshots)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcp-native-desktop-windows
+          path: artifacts/native-gui/
+          if-no-files-found: warn

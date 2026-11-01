@@ -21,12 +21,31 @@ try {
     Remove-Item "xcp-native-benchmark-2000.json", "xcp-native-benchmark-20000.json" -ErrorAction SilentlyContinue
     $process = Start-Process -FilePath $binary -ArgumentList "--benchmark" -WorkingDirectory $outDir -PassThru
     $deadline = [DateTime]::UtcNow.AddSeconds($WaitSeconds)
+    $started = [DateTime]::UtcNow
+    $firstCpu = $process.TotalProcessorTime.TotalSeconds
+    $minWorkingSet = [long]::MaxValue
+    $maxWorkingSet = 0L
+    $samples = 0
     while (-not ((Test-Path "xcp-native-benchmark-2000.json") -and (Test-Path "xcp-native-benchmark-20000.json"))) {
+        $process.Refresh()
+        $rss = [long]$process.WorkingSet64
+        if ($rss -gt 0) {
+            $minWorkingSet = [Math]::Min($minWorkingSet, $rss)
+            $maxWorkingSet = [Math]::Max($maxWorkingSet, $rss)
+            $samples++
+        }
         $process.Refresh()
         if ($process.HasExited) { throw "Native GUI exited before reports completed" }
         if ([DateTime]::UtcNow -gt $deadline) { throw "Timed out waiting for two actual measurements" }
-        Start-Sleep -Milliseconds 250
+        Start-Sleep -Milliseconds 50
     }
+    $process.Refresh()
+    $wallSeconds = [Math]::Max(0.001, ([DateTime]::UtcNow - $started).TotalSeconds)
+    $cpuSeconds = [Math]::Max(0.0, $process.TotalProcessorTime.TotalSeconds - $firstCpu)
+    $cpuPercentOfMachine = 100.0 * $cpuSeconds / ($wallSeconds * [Environment]::ProcessorCount)
+    $cpuPercentOfOneCore = 100.0 * $cpuSeconds / $wallSeconds
+    $rssAfter = [long]$process.WorkingSet64
+    $peakRss = [long]$process.PeakWorkingSet64
     $r2k = Get-Content "xcp-native-benchmark-2000.json" -Raw | ConvertFrom-Json
     $r20k = Get-Content "xcp-native-benchmark-20000.json" -Raw | ConvertFrom-Json
     if (($r2k.framesPerUpdate -ne 2000) -or ($r20k.framesPerUpdate -ne 20000) -or ($r2k.updates -ne 80) -or ($r20k.updates -ne 80)) {
@@ -58,7 +77,18 @@ try {
         cpu = $cpu.Name
         logicalProcessors = [Environment]::ProcessorCount
         screen = "$($bounds.Width)x$($bounds.Height)"
-        note = "Actual native Windows screenshot; synthetic samples, not ECU data"
+        cpuTimeSecondsDuringTrial = $cpuSeconds
+        trialWallSeconds = $wallSeconds
+        processCpuPercentOfOneCore = $cpuPercentOfOneCore
+        processCpuPercentOfMachine = $cpuPercentOfMachine
+        observedWorkingSetBytesMinimum = if ($samples -gt 0) { $minWorkingSet } else { $null }
+        observedWorkingSetBytesMaximum = if ($samples -gt 0) { $maxWorkingSet } else { $null }
+        workingSetBytesAfter = $rssAfter
+        peakWorkingSetBytes = $peakRss
+        residentSamples = $samples
+        gpuPresentedFrameTiming = $null
+        realInputToPhotonLatency = $null
+        note = "Actual native Windows screenshot; synthetic samples, not ECU data. CPU percentages are OS process-time averages over BOTH trials, not per-frame load. GPU-present and input-to-photon not instrumented."
     } | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $outDir "windows-environment.json")
     Write-Host "Actual desktop benchmark/screenshot: $outDir"
 }
