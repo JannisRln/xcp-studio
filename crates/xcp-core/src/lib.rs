@@ -70,3 +70,6 @@ pub mod pcan;
 pub mod elf;
 
 pub mod metadata;
+
+/// Read-only A2L metadata import, conversion and comparison.
+pub mod a2l;
