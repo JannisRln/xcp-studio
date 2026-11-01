@@ -8,7 +8,7 @@
 
 | ID | Ticket | Priority | Status | Depends on | GitHub issue |
 | --- | --- | --- | --- | --- | --- |
-| T-0001 | [CI and quality gates](T-0001-ci-quality-gates.md) | P0 | ready | — | [#4](https://github.com/JannisRln/xcp-studio/issues/4) |
+| T-0001 | [CI and quality gates](T-0001-ci-quality-gates.md) | P0 | in-progress | — | [#4](https://github.com/JannisRln/xcp-studio/issues/4) |
 | T-0002 | [Modular frontend architecture](T-0002-frontend-architecture.md) | P0 | ready | — | [#5](https://github.com/JannisRln/xcp-studio/issues/5) |
 | T-0003 | [Typed ELF/DWARF](T-0003-typed-elf-dwarf.md) | P0 | ready | — | [#6](https://github.com/JannisRln/xcp-studio/issues/6) |
 | T-0004 | [XCP session actor](T-0004-xcp-session-actor.md) | P0 | ready | — | [#7](https://github.com/JannisRln/xcp-studio/issues/7) |
@@ -38,7 +38,7 @@
 | 1 | Public contract and schema | T-0012 | Publishes producer/consumer JSON fixtures first |
 | 1 | ECU metadata | T-0003 | Independent metadata parser/type fixtures |
 | 1 | XCP session | T-0004 | Serialized transport/session API; coordinate DTO with T-0012 |
-| 1 | Frontend | T-0002 | First reconcile the still-open PR #18; do not create competing app-shell changes |
+| 1 | Frontend | T-0002 | PR #18 has been merged; verify new UI baseline and avoid overlapping app-shell changes |
 | 1 | Security and safeguards | T-0013 | Policy review blocks unsafe remote exposure/hardware writes |
 | 2 | Acquisition and pointer resolver | T-0005, T-0014 | Shared session reads, separate metadata/runtime boundaries |
 | 2 | A2L, hardware, project format | T-0008, T-0009, T-0010 | Independent feature modules after contracts |
