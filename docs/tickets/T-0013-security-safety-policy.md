@@ -1,5 +1,3 @@
-# T-0013 — Local API security and guarded hardware safety policy
-
 ---
 id: T-0013
 title: Local API security and guarded hardware safety policy
@@ -12,6 +10,8 @@ github_issue: 10
 depends_on: []
 requirements: [SEC-001, SEC-002, SEC-003, SEC-005, CAL-006, CAL-007]
 ---
+
+# T-0013 — Local API security and guarded hardware safety policy
 
 ## Context / desired behavior
 
