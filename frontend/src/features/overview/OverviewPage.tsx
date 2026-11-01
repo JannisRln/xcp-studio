@@ -1,4 +1,4 @@
-import type { Health, MeasurementFrame, SignalDefinition } from "../../core/api";
+import type { Health, SignalDefinition } from "../../core/api";
 import { formatAddress } from "../../core/signals";
 
 type Props = { health: Health | null; connected: boolean; signals: SignalDefinition[]; onNavigate: (page: string) => void };
