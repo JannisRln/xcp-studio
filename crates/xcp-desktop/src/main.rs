@@ -445,7 +445,7 @@ impl TabViewer for Panels<'_> {
     type Tab = Pane;
 
     fn id(&mut self, tab: &mut Pane) -> egui::Id {
-        egui::Id::new(tab)
+        egui::Id::new(*tab)
     }
 
     fn title(&mut self, tab: &mut Pane) -> egui::WidgetText {
@@ -471,7 +471,7 @@ impl TabViewer for Panels<'_> {
 }
 
 impl eframe::App for DesktopApp {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let frame_start = Instant::now();
         self.poll_backend();
         if let Some(run) = &self.benchmark {
@@ -502,7 +502,7 @@ impl eframe::App for DesktopApp {
             .show_inside(ui, &mut panels);
 
         if let Some(mut run) = self.benchmark.take() {
-            let finished = run.step(frame_start, frame_start.elapsed());
+            let finished = run.step(frame_start, frame_start.elapsed(), frame.info().cpu_usage);
             if finished {
                 let size = run.size;
                 let report = run.report();

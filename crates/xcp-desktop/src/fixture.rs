@@ -21,7 +21,7 @@ impl SampleFrame {
             timestamp_ms: ORIGIN_MS + i as u64,
             sequence: i as u64,
             values: [
-                Some(if i % 683 == 0 { 8000.0 } else { 1850.0 }),
+                Some(if i.is_multiple_of(683) { 8000.0 } else { 1850.0 }),
                 Some(88.5 + (i % 17) as f64 / 10.0),
             ],
             gap_before: false,

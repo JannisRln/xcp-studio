@@ -12,6 +12,7 @@ pub struct BenchRun {
     pub started: Instant,
     last_frame: Option<Instant>,
     update_ms: Vec<f64>,
+    prior_frame_render_cpu_ms: Vec<f64>,
     intervals_ms: Vec<f64>,
     click_to_next_update_ms: Vec<f64>,
     queued_probe: Option<Instant>,
@@ -24,6 +25,7 @@ impl BenchRun {
             started: Instant::now(),
             last_frame: None,
             update_ms: Vec::with_capacity(ITERATIONS),
+            prior_frame_render_cpu_ms: Vec::with_capacity(ITERATIONS),
             intervals_ms: Vec::with_capacity(ITERATIONS),
             click_to_next_update_ms: Vec::new(),
             queued_probe: None,
@@ -34,15 +36,21 @@ impl BenchRun {
         self.queued_probe = Some(Instant::now());
     }
 
-    pub fn step(&mut self, frame_start: Instant, cpu_update: Duration) -> bool {
+    pub fn step(&mut self, frame_start: Instant, cpu_update: Duration, prior_eframe_cpu_seconds: Option<f32>) -> bool {
         if let Some(last) = self.last_frame {
             self.intervals_ms
                 .push(frame_start.duration_since(last).as_secs_f64() * 1_000.0);
         }
         self.last_frame = Some(frame_start);
-        if let Some(clicked) = self.queued_probe.take() {
-            self.click_to_next_update_ms
-                .push(frame_start.saturating_duration_since(clicked).as_secs_f64() * 1_000.0);
+        if let Some(clicked) = self.queued_probe {
+            if frame_start >= clicked {
+                self.click_to_next_update_ms
+                    .push(frame_start.duration_since(clicked).as_secs_f64() * 1_000.0);
+                self.queued_probe = None;
+            }
+        }
+        if let Some(seconds) = prior_eframe_cpu_seconds.filter(|s| s.is_finite() && *s >= 0.0) {
+            self.prior_frame_render_cpu_ms.push(f64::from(seconds) * 1_000.0);
         }
         self.update_ms.push(cpu_update.as_secs_f64() * 1_000.0);
         self.update_ms.len() >= ITERATIONS
@@ -70,9 +78,10 @@ impl BenchRun {
                     / self.intervals_ms.len() as f64))
             },
             "cpuUiUpdateMs": percentiles(&self.update_ms),
+            "previousFrameCpuIncludingRenderingMs": percentiles(&self.prior_frame_render_cpu_ms),
             "frameIntervalMs": percentiles(&self.intervals_ms),
             "clickToNextUpdateProxyMs": percentiles(&self.click_to_next_update_ms),
-            "renderingLimitation": "CPU UI construction is timed, but GPU submit/present and OS input timestamp are NOT instrumented. FPS is frame pacing, not GPU completion. Do not compare these fields directly to browser update-to-second-rAF or ECU throughput."
+            "renderingLimitation": "App::ui timing excludes GPU work; eframe previous-frame CPU usage includes rendering CPU but excludes vsync wait and GPU present. OS input timestamp is NOT instrumented. FPS is frame pacing, not GPU completion. Do not compare these fields directly to browser update-to-second-rAF or ECU throughput."
         })
     }
 }
@@ -132,7 +141,7 @@ mod tests {
     fn completes_at_80_recorded_ui_updates() {
         let mut run = BenchRun::new(2_000);
         for i in 0..80 {
-            assert_eq!(run.step(Instant::now(), Duration::from_millis(2)), i == 79);
+            assert_eq!(run.step(Instant::now(), Duration::from_millis(2), Some(0.003)), i == 79);
         }
         assert_eq!(run.report()["updates"], 80);
         assert_eq!(run.report()["series"], 2);

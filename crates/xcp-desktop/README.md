@@ -54,6 +54,7 @@ by this native prototype.
 | Metric | Meaning | Limits |
 | --- | --- | --- |
 | cpuUiUpdateMs p50/p95/p99 | Instant timing around native App::ui | GPU submit/present is not included |
+| previousFrameCpuIncludingRenderingMs p50/p95/p99 | eframe's previous-frame CPU usage including rendering | No GPU present or vsync wait; previous-frame lag |
 | frameIntervalMs p50/p95/p99 | Time between native UI callback starts | Not physical display scanout |
 | observedFramePacingFps | Reciprocal mean frame interval | Not ECU sampling frequency |
 | completedUpdatesHz | Completed replacement cycles per second | Not DAQ throughput |
