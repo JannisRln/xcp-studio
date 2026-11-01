@@ -326,6 +326,7 @@ impl Panels<'_> {
                 for (i, segment) in segments.into_iter().enumerate() {
                     plot_ui.line(
                         Line::new(format!("{label} segment {i}"), PlotPoints::from(segment))
+                            .name(label.clone())
                             .color(color)
                             .width(1.5),
                     );
@@ -562,6 +563,7 @@ impl eframe::App for DesktopApp {
         if self.screenshot_path.is_some()
             && !self.screenshot_requested
             && self.screenshot_ui_frames >= 5
+            && (self.source == Source::Synthetic || !self.frames.is_empty())
             && (self.benchmark.is_none() || self.benchmark_completed)
         {
             ui.ctx().send_viewport_cmd(

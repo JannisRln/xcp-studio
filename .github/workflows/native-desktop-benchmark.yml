@@ -27,6 +27,9 @@ jobs:
       - name: Execute native Release app and capture actual Windows window
         shell: pwsh
         run: pwsh -File crates/xcp-desktop/scripts/windows-benchmark.ps1 -WaitSeconds 180
+      - name: Real XCP simulator to native read-only subscriber
+        shell: pwsh
+        run: pwsh -File crates/xcp-desktop/scripts/native-subscriber-e2e.ps1 -WaitSeconds 90
       - name: Checkout frozen React/uPlot benchmark comparison (PR 53)
         if: always()
         uses: actions/checkout@v4
