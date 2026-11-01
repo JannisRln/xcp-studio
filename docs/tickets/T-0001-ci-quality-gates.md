@@ -1,11 +1,11 @@
 ---
 id: T-0001
 title: Reproducible CI, lockfiles and mandatory quality gates
-status: review
+status: blocked
 priority: P0
 area: quality
-owner: assistant-ci-agent
-branch: chore/T-0001-ci-and-branch-cleanup
+owner: unassigned
+branch: none
 github_issue: 4
 depends_on: []
 requirements: [QA-001, QA-002, QA-005, QA-006]
@@ -15,7 +15,7 @@ requirements: [QA-001, QA-002, QA-005, QA-006]
 
 ## Context / desired behavior
 
-Windows CI formats Rust in a temporary runner, runs cargo test and uses npm install/build/test. The docs validator was added and passed in PR #19; frontend lockfile and Clippy/npm ci remain incomplete. This ticket also implements safe cleanup for source branches with already merged PRs.
+Windows CI formats Rust in a temporary runner, runs cargo test and uses npm install/build/test. The docs validator was added and passed in PR #19; PR #20 implemented a frontend lockfile, Clippy with warnings denied and npm ci; missing required branch protection settings remain an administrator blocker. This ticket also implements safe cleanup for source branches with already merged PRs.
 
 **Desired outcome:** Reproducible CI, lockfiles and mandatory quality gates. Implement according to [product specification](../product-specification.md), [architecture](../architecture.md) and [API contract](../api-contract.md), where applicable.
 
@@ -59,7 +59,7 @@ Windows CI formats Rust in a temporary runner, runs cargo test and uses npm inst
 
 ## Evidence and completion
 
-- Implementation PR: https://github.com/JannisRln/xcp-studio/pull/20 (awaiting merge).
-- Green Windows CI: https://github.com/JannisRln/xcp-studio/actions/runs/41285666141 on 894d87014c974e36280759e2534520dd4215e812 (rust, frontend, docs). Final ticket review commit still requires its own successful CI.
+- Implementation PR: [#20](https://github.com/JannisRln/xcp-studio/pull/20) (merged); branch pruning ran successfully and removed merged feature branches.
+- Green Windows CI: https://github.com/JannisRln/xcp-studio/actions/runs/41285666141 on 894d87014c974e36280759e2534520dd4215e812 (rust, frontend, docs). Final PR #20 head also passed CI before merge.
 - Evidence: lockfile created on Windows CI, then clean npm ci/build/test passed; cargo fmt/check, Clippy -D warnings, and cargo test passed. Doc validator CI #79 previously failed on invalid A2L requirement matching, proving it blocks a PR. Mandatory branch protection remains an administrator setting; see docs/branch-protection.md.
-- Open: required check selection in GitHub ruleset is not verified (administrator action); no deliberate failing Rust/frontend test was committed. Branch-prune workflow runs only after merge to main; audit its execution. Keep ticket in review until these checks and branch cleanup are verified.
+- Open: required check selection in GitHub ruleset is not verified (administrator action); no deliberate failing Rust/frontend test was committed. Branch-prune workflow succeeded [run #41286072510](https://github.com/JannisRln/xcp-studio/actions/runs/41286072510); **blocker:** GitHub main ruleset has not been administratively verified for required rust/frontend/docs checks. Keep ticket blocked until this review and failure-gating check are confirmed.
