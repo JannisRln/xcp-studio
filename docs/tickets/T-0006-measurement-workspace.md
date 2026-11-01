@@ -4,8 +4,8 @@ title: Real measurement workspace, charts and CSV accuracy
 status: in-progress
 priority: P0
 area: frontend-measurements
-owner: assistant-live-view
-branch: feat/T-0006-live-view-priority
+owner: assistant-live-view-e2e
+branch: test/T-0006-live-view-simulator-e2e
 github_issue: 9
 depends_on: [T-0002, T-0005]
 requirements: [MEAS-003, MEAS-008, MEAS-009, UI-005]
@@ -39,14 +39,14 @@ requirements: [MEAS-003, MEAS-008, MEAS-009, UI-005]
 
 ## Acceptance criteria
 
-- [ ] Simulator values flow from one backend acquisition into chart/table and CSV with matching timestamps.
+- [ ] Simulator values flow from one backend acquisition into chart/table and CSV with matching timestamps; this phase verifies **real Rust → Vite HTTP/WS proxy → two JS subscribers**, not browser DOM chart rendering.
 - [ ] Gaps, invalid samples and disconnected states are visible; no synthetic values leak into real view.
 - [ ] View pause does not stop backend capture; explicit stop does.
 - [ ] Keyboard interactions, unit labels and 10k+ sample render performance pass tests.
 
 ## Verification plan
 
-- [ ] Component tests, CSV golden fixture and browser E2E connect→plot→export.
+- [ ] Component tests, CSV golden fixture and full browser E2E connect→plot→export. This phase adds a Windows Node 22+ **real-service** HTTP/WS E2E (connect→shared stream→reconnect→stop), plus an Edge screenshot of the actual React Live View.
 - [ ] Document chart sampling/decimation and any unsupported interactions.
 - [ ] Current PR head passes required CI and negative-path tests; distinguish simulator from HIL evidence.
 
@@ -59,8 +59,8 @@ requirements: [MEAS-003, MEAS-008, MEAS-009, UI-005]
 
 ## Evidence and completion
 
-- Live View enhancement PR: in progress (default start page, connect/start controls, live metrics, reconnect and stream-staleness recovery).
+- [PR #31](https://github.com/JannisRln/xcp-studio/pull/31) merged: Live View default, connect/start, freshness and receiving-rate telemetry, automatic retry and stalled-stream watchdog. This PR validates the real simulator through Vite and captures a browser screenshot.
 - Implementation PRs: [#27](https://github.com/JannisRln/xcp-studio/pull/27) shared backend acquisition, pause/reattach and CSV; [#28](https://github.com/JannisRln/xcp-studio/pull/28) interactive chart and unit axes; both merged.
 - CI: [#115](https://github.com/JannisRln/xcp-studio/actions/runs/41291904365) and [#117](https://github.com/JannisRln/xcp-studio/actions/runs/41292351637), all three jobs green before merge.
-- Tests: acquisitionV1 contract parsing, invalid/out-of-range sample rejection, UI frame/csv metadata, 2,000-frame buffer, chart zoom/pan axes and extrema under 10k-point fixture. **No complete browser/server E2E yet.**
+- Tests: acquisitionV1 contract parsing, invalid/out-of-range sample rejection, UI frame/csv metadata, 2,000-frame buffer, chart zoom/pan axes and extrema under 10k-point fixture. **No full click-through browser/plot/export E2E yet**; service-proxy end-to-end coverage is being added.
 - Limitations: CSV is an optional bounded browser preview, not complete backend recording; missing client samples can occur after reconnect, no replay; chart now groups per unit with zoom/pan/cursor, but backend DAQ, per-signal quality conversion, replay and full browser E2E remain open. T-0006 remains in progress, T-0015 records durably.
