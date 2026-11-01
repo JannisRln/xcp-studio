@@ -22,10 +22,13 @@ export function alignedPlotData(
       for (const y of ys) y.pop();
     }
     x.push(frame.timestamp_ms);
+    // Build a single lookup per frame. Repeated Array.find would grow as
+    // O(frames * signals^2) and is unsuitable for 50–100 live channels.
+    const sampleMap = new Map(frame.samples.map(sample =>
+      [sample.address + ":" + sample.name, sample.value] as const));
     for (let index = 0; index < signals.length; index++) {
       const signal = signals[index];
-      const value = frame.samples.find(sample => sample.address === signal.address &&
-        sample.name === signal.name)?.value;
+      const value = sampleMap.get(signal.address + ":" + signal.name);
       ys[index].push(value !== undefined && Number.isFinite(value) ? value : NaN);
     }
   }
