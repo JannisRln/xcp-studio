@@ -298,12 +298,12 @@ mod tests {
         }
         assert!(validate(&HeaderMap::new()).is_err());
 
-        let mut headers = headers("localhost:8080", None);
-        headers.append(header::HOST, HeaderValue::from_static("localhost:8080"));
-        assert!(validate(&headers).is_err());
-        let mut headers = headers("localhost:8080", Some("http://localhost:5173"));
-        headers.append(header::ORIGIN, HeaderValue::from_static("https://evil.example"));
-        assert!(validate(&headers).is_err());
+        let mut duplicate_hosts = headers("localhost:8080", None);
+        duplicate_hosts.append(header::HOST, HeaderValue::from_static("localhost:8080"));
+        assert!(validate(&duplicate_hosts).is_err());
+        let mut duplicate_origins = headers("localhost:8080", Some("http://localhost:5173"));
+        duplicate_origins.append(header::ORIGIN, HeaderValue::from_static("https://evil.example"));
+        assert!(validate(&duplicate_origins).is_err());
     }
 
     #[test]
