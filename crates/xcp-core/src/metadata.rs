@@ -294,9 +294,6 @@ pub fn inspect_typed_dwarf(bytes: &[u8]) -> Result<TypedDwarf, MetadataError> {
     if file.format() != object::BinaryFormat::Elf {
         return Err(MetadataError::NotElf);
     }
-    if file.kind() == object::ObjectKind::Relocatable {
-        return Err(MetadataError::RelocatableUnsupported);
-    }
     let endian = if file.is_little_endian() {
         RunTimeEndian::Little
     } else {
@@ -317,6 +314,9 @@ pub fn inspect_typed_dwarf(bytes: &[u8]) -> Result<TypedDwarf, MetadataError> {
     };
     if !has_debug_info {
         return Ok(result);
+    }
+    if file.kind() == object::ObjectKind::Relocatable {
+        return Err(MetadataError::RelocatableUnsupported);
     }
     let dwarf = gimli::Dwarf::load(|section_id| {
         let bytes = match file.section_by_name(section_id.name()) {
