@@ -1,5 +1,5 @@
 //! ELF symbol table inspection for ECU firmware images.
-//! DWARF type resolution and runtime relocation are not yet implemented.
+//! DWARF summaries are retained for compatibility; read-only typed metadata lives in `metadata`.
 
 use object::{Object, ObjectSymbol, SymbolKind};
 use std::path::Path;
