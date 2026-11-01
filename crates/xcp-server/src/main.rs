@@ -449,7 +449,7 @@ mod snapshot_tests {
     async fn parallel_actor_backed_reads_do_not_corrupt_mta() {
         let actor = simulated_session_actor().unwrap();
         let session = actor.handle();
-        session_connect(State(session.clone())).await.unwrap();
+        let _ = session_connect(State(session.clone())).await.unwrap();
         let tasks: Vec<_> = (0..16)
             .map(|_| {
                 let current = session.clone();
