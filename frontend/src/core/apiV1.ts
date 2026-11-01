@@ -27,6 +27,7 @@ export type ApiErrorV1 = {
     message: string;
     request_id: string;
     retryable: boolean;
+    details?: Record<string, unknown>;
   };
 };
 
@@ -85,7 +86,9 @@ export function parseReadV1(value: unknown): ReadResultV1 {
 export function parseErrorV1(value: unknown): ApiErrorV1 {
   if (!isV1(value) || !isObject(value.error) ||
       !isString(value.error.code) || !isString(value.error.message) ||
-      !isString(value.error.request_id) || typeof value.error.retryable !== "boolean")
+      !isString(value.error.request_id) || typeof value.error.retryable !== "boolean" ||
+      !/^[A-Z][A-Z0-9_]*$/.test(value.error.code as string) ||
+      (value.error.details !== undefined && !isObject(value.error.details)))
     throw new Error("Malformed versioned API error");
   return value as ApiErrorV1;
 }

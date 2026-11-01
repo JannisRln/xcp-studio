@@ -106,6 +106,32 @@ pub struct AcquisitionStatus {
     pub error: Option<String>,
 }
 
+/// Finite values obtained from one successful sequential simulator read.
+/// Valid does not imply a simultaneous ECU timestamp or a verified address.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SampleQuality { Valid }
+
+/// The v1 acquisition accepts manually configured raw ECU addresses.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AddressOrigin { Manual }
+
+/// Additive metadata is optional to preserve pre-extension v1 JSON fixtures.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AcquisitionSampleV1 {
+    pub name: String,
+    pub address: u32,
+    pub value: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value_type: Option<crate::SnapshotValueType>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quality: Option<SampleQuality>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub address_origin: Option<AddressOrigin>,
+}
+
 #[derive(Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AcquisitionEvent {
@@ -116,12 +142,18 @@ pub enum AcquisitionEvent {
         timestamp_ms: u128,
         monotonic_elapsed_ms: u64,
         dropped_since_previous: u64,
-        samples: Vec<SnapshotSample>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        timestamp_origin: Option<&'static str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        monotonic_clock: Option<&'static str>,
+        samples: Vec<AcquisitionSampleV1>,
     },
     Gap {
         schema_version: u8,
         acquisition_id: String,
         dropped: u64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        scope: Option<&'static str>,
     },
     Status {
         schema_version: u8,
@@ -304,7 +336,16 @@ async fn acquire(run: Arc<AcquisitionRun>, session: Session, mut stop_rx: watch:
                             timestamp_ms: snapshot.timestamp_ms,
                             monotonic_elapsed_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
                             dropped_since_previous: 0,
-                            samples: snapshot.samples,
+                            timestamp_origin: Some("host_utc_after_reads"),
+                            monotonic_clock: Some("acquisition_elapsed"),
+                            samples: snapshot.samples.into_iter().zip(run.config.signals.iter()).map(|(sample, signal)| AcquisitionSampleV1 {
+                                name: sample.name,
+                                address: sample.address,
+                                value: sample.value,
+                                value_type: Some(signal.value_type.clone()),
+                                quality: Some(SampleQuality::Valid),
+                                address_origin: Some(AddressOrigin::Manual),
+                            }).collect(),
                         };
                         // Broadcast send never waits for a slow client. Lagged receivers
                         // observe a gap and account the dropped frames independently.
@@ -419,6 +460,7 @@ async fn send_events(
                             schema_version: 1,
                             acquisition_id: run.id.clone(),
                             dropped,
+                            scope: Some("subscriber"),
                         }
                     }
                     Err(broadcast::error::RecvError::Closed) => break,
@@ -468,16 +510,24 @@ mod tests {
             timestamp_ms: 1761980000000,
             monotonic_elapsed_ms: 20,
             dropped_since_previous: 0,
+            timestamp_origin: None,
+            monotonic_clock: None,
             samples: vec![
-                SnapshotSample {
+                AcquisitionSampleV1 {
                     name: "Engine speed".into(),
                     address: 4096,
                     value: 1850.0,
+                    value_type: None,
+                    quality: None,
+                    address_origin: None,
                 },
-                SnapshotSample {
+                AcquisitionSampleV1 {
                     name: "Coolant".into(),
                     address: 4100,
                     value: 88.5,
+                    value_type: None,
+                    quality: None,
+                    address_origin: None,
                 },
             ],
         };
@@ -490,11 +540,40 @@ mod tests {
             schema_version: 1,
             acquisition_id: "acq-1".into(),
             dropped: 11,
+            scope: None,
         };
         let expected: serde_json::Value = serde_json::from_str(include_str!(
             "../../../contracts/v1/acquisition-gap.json"
         )).unwrap();
         assert_eq!(serde_json::to_value(gap).unwrap(), expected);
+
+        let enriched: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../contracts/v1/acquisition-sample-qualified.json"
+        )).unwrap();
+        let encoded = serde_json::to_value(AcquisitionEvent::Samples {
+            schema_version: 1,
+            acquisition_id: "acq-1".into(),
+            sequence: 1,
+            timestamp_ms: 1761980000000,
+            monotonic_elapsed_ms: 20,
+            dropped_since_previous: 0,
+            timestamp_origin: Some("host_utc_after_reads"),
+            monotonic_clock: Some("acquisition_elapsed"),
+            samples: vec![AcquisitionSampleV1 {
+                name: "Engine speed".into(), address: 4096, value: 1850.0,
+                value_type: Some(SnapshotValueType::U32), quality: Some(SampleQuality::Valid),
+                address_origin: Some(AddressOrigin::Manual),
+            }],
+        }).unwrap();
+        assert_eq!(encoded, enriched);
+        let decoded: AcquisitionSampleV1 = serde_json::from_value(enriched["samples"][0].clone()).unwrap();
+        assert!(matches!(decoded.quality, Some(SampleQuality::Valid)));
+        for invalid in [
+            serde_json::json!({"name":"rpm","address":4096,"value":1850,"quality":"unknown"}),
+            serde_json::json!({"name":"rpm","address":4096,"value":1850,"value_type":"u64"}),
+            serde_json::json!({"name":"rpm","address":4096,"value":1850,"address_origin":"elf_verified"}),
+            serde_json::json!({"name":"rpm","address":4294967296_u64,"value":1850}),
+        ] { assert!(serde_json::from_value::<AcquisitionSampleV1>(invalid).is_err()); }
     }
 
     #[test]
@@ -555,6 +634,8 @@ mod tests {
                 timestamp_ms: 0,
                 monotonic_elapsed_ms: 0,
                 dropped_since_previous: 0,
+                timestamp_origin: None,
+                monotonic_clock: None,
                 samples: vec![],
             });
         }
