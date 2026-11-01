@@ -67,7 +67,7 @@ Workspace signal and chart state is not persisted as a versioned project format.
 
 ## Evidence and completion
 
-- Implementation PR / commit: pending.
-- CI workflow/head SHA: pending.
-- Test/fixture evidence: pending.
-- Known limitations and follow-ups: pending.
+- Implementation PR: [Draft PR #51](https://github.com/JannisRln/xcp-studio/pull/51); branch `feature/T-0010-versioned-project-core`.
+- CI workflow/head SHA: final head checks pending; prior branch [CI run 41328527562](https://github.com/JannisRln/xcp-studio/actions/runs/41328527562) passed all four jobs before the latest hardening commits; do not use this as current-head evidence.
+- Test/fixture evidence: `frontend/src/features/projects/projectFormat.test.ts` (roundtrip, legacy migration, corrupt/newer versions, missing/stale/duplicate ECU identity, secret/unknown fields, bounded File import/export).
+- Known limitations and follow-ups: durable atomic save/write fault tests, AppShell/project picker and browser E2E reopen, real file fingerprint verification, session/read safety integration. T-0012 coordination required.
