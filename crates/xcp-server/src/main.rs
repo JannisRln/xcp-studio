@@ -1,3 +1,4 @@
+mod diagnostics;
 mod security;
 mod hardware_policy;
 mod acquisition;
