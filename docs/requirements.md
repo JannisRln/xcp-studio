@@ -49,7 +49,7 @@
 | MEAS-007 | P0 | Configure multiple typed signals/rates safely. | Invalid rate, duplicates, 64+ request handling; IT | T-0005 |
 | MEAS-008 | P0 | Render live chart with units, time axis and gaps. | Widget/composition tests; E2E | T-0006 |
 | MEAS-009 | P0 | Separate display pause, capture pause and stop. | Lifecycle tests for each action; E2E | T-0006 |
-| MEAS-010 | P1 | Persist large recordings in backend with limits. | Sustained recording/disk-full/reopen tests; IT | T-0010 |
+| MEAS-010 | P1 | Persist large recordings in backend with limits. | Sustained recording/disk-full/reopen tests; IT | T-0015 |
 | MEAS-011 | P1 | Prefer ECU DAQ where supported; fallback polling explicitly. | DAQ test vs polling trace; HIL/IT | T-0005 |
 | MEAS-012 | P0 | Identify missing samples and sequence gaps. | Simulated loss/out-of-order; IT | T-0005 |
 
@@ -97,8 +97,8 @@
 | PROJ-005 | P1 | Distinguish missing/stale referenced ELF/A2L. | Stale-file scenario; IT | T-0010 |
 | DIAG-001 | P0 | Structured errors and correlation context. | Reproducible simulator faults; IT | T-0012 |
 | DIAG-002 | P0 | Expose acquisition rate/drop/timeout counters. | Metrics integration tests; IT | T-0005 |
-| DIAG-003 | P1 | Export redacted diagnostic bundle. | Sensitive data omitted; AT | T-0010 |
-| DIAG-004 | P1 | Display session and transport event history. | Session fault test; E2E | T-0010 |
+| DIAG-003 | P1 | Export redacted diagnostic bundle. | Sensitive data omitted; AT | T-0016 |
+| DIAG-004 | P1 | Display session and transport event history. | Session fault test; E2E | T-0016 |
 
 ## API, security, quality
 
