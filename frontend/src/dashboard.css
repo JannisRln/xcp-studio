@@ -233,3 +233,11 @@ select { width: auto; }
 @media(prefers-reduced-motion:reduce) {
   .live-hero--live .live-beacon { animation: none; }
 }
+
+/* High-throughput oscilloscope: Canvas never creates one DOM node per sample. */
+.live-canvas { cursor: crosshair; border: 1px solid #273d54; border-radius: 8px; }
+.live-canvas:active { cursor: grabbing; }
+.live-measure-tools { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 8px; margin-top: 13px; }
+.live-measure-tools > div { display: flex; flex-direction: column; gap: 5px; border: 1px solid #2d4057; border-radius: 7px; background: #132338; padding: 10px 12px; min-width: 0; }
+.live-measure-tools strong { font-size: 10px; color: #93a9c3; letter-spacing: .6px; }
+.live-measure-tools span { font-variant-numeric: tabular-nums; font-size: 14px; color: #d9ebff; overflow-wrap: anywhere; }
