@@ -10,7 +10,7 @@ The checked-in JSON documents are **schema examples**, tested by both Rust (`cra
 | error-disconnected.json | Error response for reading while disconnected (409) |
 | acquisition-sample.json | Shared acquisition WebSocket samples event |
 | acquisition-gap.json | Subscriber overflow/gap WebSocket event |
-| acquisition-status.json | GET/POST acquisition status object |
+| acquisition-status.json | GET /api/v1/acquisitions/current or ID, POST acquisition status object |
 
 Versioning policy: additive changes are allowed within a version only if older consumers still parse responses; breaking semantics require a new version or explicit migration. Unknown schema_version is an error. Do not represent large 64-bit values as floating-point JSON numbers. Acquisition samples and gaps have a **implemented backend polling** WebSocket versioned envelope (T-0005). This does not implement ECU-side DAQ, persistent recording or replay.
 
