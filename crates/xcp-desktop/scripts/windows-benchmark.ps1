@@ -19,7 +19,9 @@ $process = $null
 Push-Location $outDir
 try {
     Remove-Item "xcp-native-benchmark-2000.json", "xcp-native-benchmark-20000.json" -ErrorAction SilentlyContinue
-    $process = Start-Process -FilePath $binary -ArgumentList "--benchmark" -WorkingDirectory $outDir -PassThru
+    $rendered = Join-Path $outDir "native-workspace-rendered.png"
+    Remove-Item $rendered -ErrorAction SilentlyContinue
+    $process = Start-Process -FilePath $binary -ArgumentList @("--benchmark", "--screenshot=$rendered") -WorkingDirectory $outDir -PassThru
     $deadline = [DateTime]::UtcNow.AddSeconds($WaitSeconds)
     $started = [DateTime]::UtcNow
     $firstCpu = $process.TotalProcessorTime.TotalSeconds
@@ -51,8 +53,17 @@ try {
     if (($r2k.framesPerUpdate -ne 2000) -or ($r20k.framesPerUpdate -ne 20000) -or ($r2k.updates -ne 80) -or ($r20k.updates -ne 80)) {
         throw "Unexpected benchmark fixture or update count"
     }
+    $renderDeadline = [DateTime]::UtcNow.AddSeconds(15)
+    while (-not (Test-Path $rendered)) {
+        if ([DateTime]::UtcNow -gt $renderDeadline) {
+            throw "Actual eframe renderer returned no screenshot (no fabricated fallback)"
+        }
+        Start-Sleep -Milliseconds 200
+    }
     $process.Refresh()
-    if ($process.MainWindowHandle -eq [IntPtr]::Zero) { throw "No interactive GUI window; screenshot not collected" }
+    if ($process.MainWindowHandle -eq [IntPtr]::Zero) {
+        Write-Warning "No interactive desktop window handle; captured real rendered framebuffer only."
+    }
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
     $screen = [System.Windows.Forms.Screen]::PrimaryScreen
@@ -65,7 +76,9 @@ try {
             $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
         }
         finally { $graphics.Dispose() }
-        $bmp.Save((Join-Path $outDir "native-workspace-windows.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+        if ($process.MainWindowHandle -ne [IntPtr]::Zero) {
+            $bmp.Save((Join-Path $outDir "native-workspace-windows.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+        }
     }
     finally { $bmp.Dispose() }
     $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
@@ -88,7 +101,9 @@ try {
         residentSamples = $samples
         gpuPresentedFrameTiming = $null
         realInputToPhotonLatency = $null
-        note = "Actual native Windows screenshot; synthetic samples, not ECU data. CPU percentages are OS process-time averages over BOTH trials, not per-frame load. GPU-present and input-to-photon not instrumented."
+        framebufferScreenshot = "native-workspace-rendered.png"
+        desktopScreenshot = if (Test-Path "native-workspace-windows.png") { "native-workspace-windows.png" } else { $null }
+        note = "Captured rendered pixels from the real eframe window; an OS desktop screenshot is reported separately only when captured. Neither proves monitor scanout or input-to-photon. CPU percentages are averages over both trials."
     } | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $outDir "windows-environment.json")
     Write-Host "Actual desktop benchmark/screenshot: $outDir"
 }
