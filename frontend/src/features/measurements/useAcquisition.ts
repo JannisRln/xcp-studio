@@ -15,7 +15,12 @@ export function appendFrame(previous: MeasurementFrame[], frame: MeasurementFram
 }
 
 export function eventFrame(event: AcquisitionSamplesEvent): MeasurementFrame {
-  return { timestamp_ms: event.timestamp_ms, samples: event.samples };
+  return {
+    timestamp_ms: event.timestamp_ms, samples: event.samples,
+    acquisition_id: event.acquisition_id, sequence: event.sequence,
+    monotonic_elapsed_ms: event.monotonic_elapsed_ms,
+    dropped_since_previous: event.dropped_since_previous,
+  };
 }
 
 function describeError(cause: unknown): string {
@@ -35,6 +40,7 @@ export function useAcquisition(connected: boolean) {
   const mounted = useRef(false);
   const pausedRef = useRef(false);
   const activeId = useRef<string | null>(null);
+  const pendingDrops = useRef(0);
 
   const detach = useCallback(() => {
     const current = socket.current;
@@ -68,12 +74,15 @@ export function useAcquisition(connected: boolean) {
           throw new Error("Acquisition ID mismatch in WebSocket message");
         if (event.type === "samples") {
           const frame = eventFrame(event);
+          frame.dropped_since_previous = (frame.dropped_since_previous ?? 0) + pendingDrops.current;
+          pendingDrops.current = 0;
           setLatest(frame);
           setReceived(count => count + 1);
           setStatus(previous => previous?.acquisition_id === event.acquisition_id
             ? { ...previous, sequence: event.sequence } : previous);
           if (!pausedRef.current) setFrames(previous => appendFrame(previous, frame));
         } else if (event.type === "gap") {
+          pendingDrops.current += event.dropped;
           setDropped(count => count + event.dropped);
         } else {
           setStatus(previous => previous?.acquisition_id === event.acquisition_id
@@ -156,6 +165,7 @@ export function useAcquisition(connected: boolean) {
       setLatest(null);
       setReceived(0);
       setDropped(0);
+      pendingDrops.current = 0;
       pausedRef.current = false;
       setPaused(false);
       attach(created);
@@ -192,6 +202,7 @@ export function useAcquisition(connected: boolean) {
     setFrames([]);
     setReceived(0);
     setDropped(0);
+    pendingDrops.current = 0;
     setLatest(null);
   }, []);
 
