@@ -7,7 +7,7 @@ use xcp_core::metadata::{
 #[test]
 fn parses_compiled_dwarf_struct_pointer_and_array() {
     // GCC 14 x86_64 relocatable ELF; .debug_info uses DWARF 4.
-    let data = inspect_typed_dwarf(include_bytes!("fixtures/engine.o"))
+    let data = inspect_typed_dwarf(include_bytes!("fixtures/engine.elf"))
         .expect("synthetic compiler fixture should parse");
 
     assert!(data.has_debug_info);
@@ -51,4 +51,14 @@ fn stripped_elf_does_not_fabricate_typed_variables() {
     assert!(!data.has_debug_info);
     assert_eq!(data.compilation_units, 0);
     assert!(data.variables.is_empty());
+}
+
+#[test]
+fn relocatable_dwarf_requires_relocation_before_inspection() {
+    // DW_AT_name and DW_OP_addr contain unapplied ELF relocations in .o files.
+    let data = inspect_typed_dwarf(include_bytes!("fixtures/engine.o"));
+    assert!(matches!(
+        data,
+        Err(xcp_core::metadata::MetadataError::RelocatableUnsupported)
+    ));
 }

@@ -61,5 +61,5 @@ ELF symbol inspection and a DWARF compilation-unit summary exist; the typed vari
 
 - Implementation PR / commit: this branch; PR pending assignment.
 - CI workflow/head SHA: pending (do not claim acceptance before CI).
-- Unit tests: `metadata::tests` validate malformed input, member offsets, recursive aliases and array overflow. Integration tests: `tests/dwarf_metadata.rs` validate GCC-compiled DWARF 4 type/members/pointers/array and stripped ELF; CI results pending.
+- Unit tests: `metadata::tests` validate malformed input, member offsets, recursive aliases and array overflow. Integration tests: `tests/dwarf_metadata.rs` validate GCC-compiled, linked DWARF 4 type/members/pointers/array, stripped ELF, and explicit rejection of unrelocated `.o` debug sections; CI results pending. Type expansion is capped to bound pathological metadata.
 - Known limitations: read-only crate API, no public REST schema change, unresolved static/runtime mapping, no arbitrary expression execution, no cross-unit type resolution, and no ECU pointer dereference. Member locations requiring expressions are marked unknown.

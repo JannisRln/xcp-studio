@@ -14,6 +14,7 @@ const MAX_DIES: usize = 200_000;
 const MAX_TYPE_DEPTH: usize = 16;
 const MAX_MEMBERS: usize = 256;
 const MAX_VARIABLES: usize = 50_000;
+const MAX_EXPANDED_TYPES: usize = 100_000;
 
 /// Target byte order encoded by the ELF, independent of the host machine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -103,6 +104,8 @@ pub enum MetadataError {
     NotElf,
     #[error("ELF image exceeds the 32 MiB metadata limit")]
     TooLarge,
+    #[error("relocatable ELF needs DWARF relocation application before type inspection")]
+    RelocatableUnsupported,
     #[error("DWARF metadata exceeds the bounded inspection limit")]
     LimitExceeded,
 }
@@ -182,11 +185,13 @@ fn resolve_type(
     dies: &HashMap<u64, Die>,
     visiting: &mut HashSet<u64>,
     depth: usize,
+    remaining: &mut usize,
 ) -> TypeDescriptor {
     let Some(id) = id else { return unknown_type(); };
-    if depth >= MAX_TYPE_DEPTH || !visiting.insert(id) {
+    if depth >= MAX_TYPE_DEPTH || *remaining == 0 || !visiting.insert(id) {
         return unknown_type();
     }
+    *remaining -= 1;
     let result = (|| {
         let Some(die) = dies.get(&id) else { return unknown_type(); };
         let tag = die.tag;
@@ -225,11 +230,16 @@ fn resolve_type(
             }
             gimli::DW_TAG_array_type => {
                 desc.kind = TypeKind::Array;
-                let element = resolve_type(die.type_id, dies, visiting, depth + 1);
+                let element = resolve_type(die.type_id, dies, visiting, depth + 1, remaining);
                 desc.element_type = Some(element.name);
-                desc.element_count = dies.values()
+                let mut dimensions = 0_usize;
+                let count = dies.values()
                     .filter(|child| child.parent == Some(id) && child.tag == gimli::DW_TAG_subrange_type)
-                    .try_fold(1_u64, |count, child| count.checked_mul(child.count?));
+                    .try_fold(1_u64, |count, child| {
+                        dimensions += 1;
+                        count.checked_mul(child.count?)
+                    });
+                desc.element_count = if dimensions == 0 { None } else { count };
                 if desc.byte_size.is_none() {
                     desc.byte_size = element.byte_size
                         .and_then(|width| desc.element_count.and_then(|n| width.checked_mul(n)));
@@ -249,13 +259,13 @@ fn resolve_type(
                     desc.members.push(TypeMember {
                         name: member.name.clone().unwrap_or_else(|| "<anonymous>".into()),
                         byte_offset: member.member_offset,
-                        descriptor: resolve_type(member.type_id, dies, visiting, depth + 1),
+                        descriptor: resolve_type(member.type_id, dies, visiting, depth + 1, remaining),
                     });
                 }
             }
             gimli::DW_TAG_typedef | gimli::DW_TAG_const_type
                 | gimli::DW_TAG_volatile_type | gimli::DW_TAG_restrict_type => {
-                let mut underlying = resolve_type(die.type_id, dies, visiting, depth + 1);
+                let mut underlying = resolve_type(die.type_id, dies, visiting, depth + 1, remaining);
                 if let Some(alias) = &die.name {
                     underlying.name = alias.clone();
                 }
@@ -283,6 +293,9 @@ pub fn inspect_typed_dwarf(bytes: &[u8]) -> Result<TypedDwarf, MetadataError> {
     let file = object::File::parse(bytes)?;
     if file.format() != object::BinaryFormat::Elf {
         return Err(MetadataError::NotElf);
+    }
+    if file.kind() == object::ObjectKind::Relocatable {
+        return Err(MetadataError::RelocatableUnsupported);
     }
     let endian = if file.is_little_endian() {
         RunTimeEndian::Little
@@ -314,6 +327,7 @@ pub fn inspect_typed_dwarf(bytes: &[u8]) -> Result<TypedDwarf, MetadataError> {
     })?;
     let mut units = dwarf.units();
     let mut total_dies = 0_usize;
+    let mut expansion_budget = MAX_EXPANDED_TYPES;
     while let Some(header) = units.next()? {
         result.compilation_units += 1;
         let unit = dwarf.unit(header)?;
@@ -344,9 +358,11 @@ pub fn inspect_typed_dwarf(bytes: &[u8]) -> Result<TypedDwarf, MetadataError> {
                 type_id: unit_reference(entry)?,
                 byte_size: numeric(entry, gimli::DW_AT_byte_size)?,
                 encoding: numeric(entry, gimli::DW_AT_encoding)?,
-                count: numeric(entry, gimli::DW_AT_count)?
-                    .or_else(|| numeric(entry, gimli::DW_AT_upper_bound).ok().flatten()
-                        .and_then(|upper| upper.checked_add(1))),
+                count: match numeric(entry, gimli::DW_AT_count)? {
+                    Some(count) => Some(count),
+                    None => numeric(entry, gimli::DW_AT_upper_bound)?
+                        .and_then(|upper| upper.checked_add(1)),
+                },
                 member_offset: numeric(entry, gimli::DW_AT_data_member_location)?,
                 location: if entry.tag() == gimli::DW_TAG_variable {
                     location(entry, &unit)?
@@ -368,10 +384,16 @@ pub fn inspect_typed_dwarf(bytes: &[u8]) -> Result<TypedDwarf, MetadataError> {
                 return Err(MetadataError::LimitExceeded);
             }
             let die = &dies[&id];
+            let descriptor = resolve_type(
+                die.type_id, &dies, &mut HashSet::new(), 0, &mut expansion_budget,
+            );
+            if expansion_budget == 0 {
+                return Err(MetadataError::LimitExceeded);
+            }
             result.variables.push(TypedVariable {
                 name: die.name.clone().unwrap_or_default(),
                 compilation_unit: unit_name.clone(),
-                descriptor: resolve_type(die.type_id, &dies, &mut HashSet::new(), 0),
+                descriptor,
                 address: die.location.clone(),
             });
         }
@@ -422,7 +444,7 @@ mod tests {
         let mut spare = die(4, gimli::DW_TAG_member, "unknown_offset", Some(1));
         spare.parent = Some(2);
         nodes.insert(4, spare);
-        let desc = resolve_type(Some(2), &nodes, &mut HashSet::new(), 0);
+        let desc = resolve_type(Some(2), &nodes, &mut HashSet::new(), 0, &mut 1024);
         assert_eq!(desc.kind, TypeKind::Structure);
         assert_eq!(desc.members.len(), 2);
         assert_eq!(desc.members[0].byte_offset, Some(8));
@@ -435,7 +457,7 @@ mod tests {
         let mut nodes = HashMap::new();
         nodes.insert(1, die(1, gimli::DW_TAG_typedef, "Self", Some(1)));
         assert_eq!(
-            resolve_type(Some(1), &nodes, &mut HashSet::new(), 0).kind,
+            resolve_type(Some(1), &nodes, &mut HashSet::new(), 0, &mut 1024).kind,
             TypeKind::Unknown
         );
         let mut array = die(2, gimli::DW_TAG_array_type, "buffer", Some(3));
@@ -456,5 +478,13 @@ mod tests {
         assert_eq!(desc.kind, TypeKind::Array);
         assert_eq!(desc.element_count, None);
         assert_eq!(desc.byte_size, None);
+    }
+
+    #[test]
+    fn missing_subrange_is_not_assumed_to_have_one_element() {
+        let mut nodes = HashMap::new();
+        nodes.insert(1, die(1, gimli::DW_TAG_array_type, "unknown_length", None));
+        let desc = resolve_type(Some(1), &nodes, &mut HashSet::new(), 0, &mut 1024);
+        assert_eq!(desc.element_count, None);
     }
 }
