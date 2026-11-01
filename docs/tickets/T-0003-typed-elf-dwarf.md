@@ -40,7 +40,7 @@ ELF symbol inspection and a DWARF compilation-unit summary exist; the typed vari
 ## Acceptance criteria
 
 - [x] Fixture variable type, size and member offsets match compiled sources (GCC DWARF 4; Windows Rust tests in CI #41308853282).
-- [x] Invalid/stripped/relocatable ELF and unsupported location expressions have explicit errors/states (unit and integration tests).
+- [ ] Invalid/stripped/relocatable ELF and unsupported location expressions have explicit errors/states (ELF error paths tested; additional dynamic expression fixtures pending).
 - [ ] Unresolved runtime address is never passed to read/write API.
 - [ ] Architecture/target endian and signedness are preserved in typed descriptors.
 
