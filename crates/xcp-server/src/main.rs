@@ -306,13 +306,14 @@ async fn stream_client(mut socket: WebSocket, session: Session) {
                     }).collect(),
                 };
                 let result = session_snapshot(State(session.clone()), Json(request)).await;
+                let failed = result.is_err();
                 let payload = match result {
                     Ok(Json(snapshot)) => serde_json::to_string(&snapshot).ok(),
                     Err((_, Json(error))) => serde_json::to_string(&error).ok(),
                 };
                 let Some(payload) = payload else { break };
                 if socket.send(Message::Text(payload.into())).await.is_err() { break; }
-                if result_is_error(&session) { break; }
+                if failed { break; }
             }
             incoming = socket.recv() => {
                 match incoming {
@@ -324,9 +325,6 @@ async fn stream_client(mut socket: WebSocket, session: Session) {
     }
 }
 
-fn result_is_error(session: &Session) -> bool {
-    session.lock().unwrap_or_else(|e| e.into_inner()).is_none()
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
