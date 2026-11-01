@@ -59,6 +59,13 @@ impl RateWindow {
 
 /// Resources shared across all API routes, rather than per request/client.
 /// No client-provided fields configure or increase these budgets.
+/// The permit survives an HTTP timeout while a CPU-bound ELF parse is still
+/// running in spawn_blocking. Dropping a timed-out HTTP future cannot bypass
+/// the parser concurrency budget.
+pub struct ElfParsePermit {
+    _slot: OwnedSemaphorePermit,
+}
+
 pub struct SecurityLimits {
     requests: Arc<Semaphore>,
     elf_parses: Arc<Semaphore>,
@@ -218,9 +225,14 @@ pub async fn local_api_guard(
         )
         .into_response();
     };
+    let mut request = request;
     let _elf_permit = if elf {
         match Arc::clone(&limits.elf_parses).try_acquire_owned() {
-            Ok(permit) => Some(permit),
+            Ok(permit) => {
+                let holder = Arc::new(ElfParsePermit { _slot: permit });
+                request.extensions_mut().insert(Arc::clone(&holder));
+                Some(holder)
+            }
             Err(_) => {
                 return error(
                     StatusCode::TOO_MANY_REQUESTS,
