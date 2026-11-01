@@ -5,6 +5,10 @@
   "sampling_mode": "polling",
   "interval_ms": 100,
   "signal_count": 2,
+  "signals": [
+    {"name": "Engine speed", "address": 4096, "value_type": "u32"},
+    {"name": "Coolant", "address": 4100, "value_type": "f32"}
+  ],
   "sequence": 5,
   "subscriber_count": 2,
   "dropped_subscriber_frames": 0,
