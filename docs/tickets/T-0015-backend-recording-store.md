@@ -1,5 +1,3 @@
-# T-0015 — Backend-owned durable recording and export
-
 ---
 id: T-0015
 title: Backend-owned durable recording and export
@@ -12,6 +10,8 @@ github_issue: 9
 depends_on: [T-0005, T-0012]
 requirements: [MEAS-010]
 ---
+
+# T-0015 — Backend-owned durable recording and export
 
 ## Context / desired behavior
 
