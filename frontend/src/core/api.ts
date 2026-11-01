@@ -1,3 +1,5 @@
+import { apiV1 } from "./apiV1";
+
 export type Health = { status: string; mode: string; version: string };
 export type SessionStatus = { connected: boolean; transport: string };
 export type ElfSymbol = { name: string; address: number; address_hex: string; size: number; kind: string };
@@ -24,14 +26,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  health: () => request<Health>("/api/health"),
-  status: () => request<SessionStatus>("/api/xcp/status"),
+  health: () => apiV1.health(),
+  status: () => apiV1.status(),
   connect: () => request<SessionStatus>("/api/xcp/connect", { method: "POST" }),
   disconnect: () => request<SessionStatus>("/api/xcp/disconnect", { method: "POST" }),
-  read: (address: number, count: number) => request<ReadResult>("/api/xcp/read", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address, count }),
-  }),
+  read: (address: number, count: number) => apiV1.read(address, count),
   inspectElf: (file: File) => request<ElfResult>("/api/elf/inspect", {
     method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file,
     signal: AbortSignal.timeout(30000),

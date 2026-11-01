@@ -1,3 +1,5 @@
+mod api;
+
 use axum::{
     extract::{ws::{Message, WebSocket, WebSocketUpgrade}, DefaultBodyLimit, State},
     http::StatusCode,
@@ -331,6 +333,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let session: Session = Arc::new(Mutex::new(None));
     let app = Router::new()
         .route("/api/health", get(health))
+        .route("/api/v1/health", get(api::v1::health))
+        .route("/api/v1/sessions/current", get(api::v1::status))
+        .route("/api/v1/sessions/current/reads", post(api::v1::read))
         .route("/api/elf/inspect", post(inspect_elf))
         .route("/api/xcp/status", get(session_status))
         .route("/api/xcp/connect", post(session_connect))

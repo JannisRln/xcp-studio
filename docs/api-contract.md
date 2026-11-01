@@ -110,9 +110,29 @@ The stream is **per WebSocket client**: opening another tab creates another poll
 
 The current server uses response body {"error":"message"} for common 400 BAD_REQUEST paths (including disconnected session and invalid count). This is a prototype error shape; clients must check HTTP status. Some errors can differ by route. There is no guaranteed stable error code until API-002 is implemented.
 
-## 3. TARGET REST API v1 (design proposal; not currently implemented)
+## 2.5 Additive CURRENT /api/v1 REST slice (T-0012)
 
-All endpoints below require an implementing ticket and contract tests; names are tentative until API-001 is accepted.
+The following endpoints are implemented by T-0012 and retain the existing /api/* routes unchanged. Only these endpoints are currently supported; the rest of the v1 proposal in section 3 is not implemented.
+
+| Method | Path | Successful response | Validation / errors |
+| --- | --- | --- | --- |
+| GET | /api/v1/health | {schema_version:1,status,mode,version} | No request body |
+| GET | /api/v1/sessions/current | {schema_version:1,connected,transport} | Current simulated singleton only; **no opaque session ID yet** |
+| POST | /api/v1/sessions/current/reads | {schema_version:1,address,bytes,hex} | Input {address:u32,count:1..4096}; 32-bit range overflow rejected |
+
+For v1 reads, malformed JSON/unknown fields return HTTP 400 INVALID_JSON; count and address overflow return HTTP 422 INVALID_READ_COUNT / INVALID_ADDRESS_RANGE; disconnected session returns HTTP 409 XCP_SESSION_DISCONNECTED; XCP transport/protocol read failures return HTTP 502 XCP_READ_FAILED with retryable=true (the caller must decide if retry is safe). Every v1 structured error includes a nonempty per-process request_id, intended for correlation rather than a persistent session ID.
+
+Example v1 error:
+
+~~~json
+{"schema_version":1,"error":{"code":"XCP_SESSION_DISCONNECTED","message":"XCP simulator is not connected","request_id":"request-1","retryable":false}}
+~~~
+
+Canonical shared fixtures: [contracts/v1](../contracts/v1/README.md). Both Rust server tests and TypeScript client tests validate them. The frontend uses these validated v1 endpoints for health/status/raw reads; connection/disconnection, ELF upload and measurement streaming remain on their unversioned routes. The v1 WS subscriber endpoint and DAQ/recording ownership remain target functionality for T-0005.
+
+## 3. TARGET REST API v1 (design proposal; implemented subset identified below)
+
+Except for the three **CURRENT** endpoints in section 2.5, these target endpoints require implementing tickets and contract tests; names are tentative until API-001 is fully accepted.
 
 | Method | Proposed route | Purpose | State owner |
 | --- | --- | --- | --- |
