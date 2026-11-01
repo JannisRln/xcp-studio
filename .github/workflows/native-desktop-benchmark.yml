@@ -50,6 +50,15 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path artifacts/native-gui | Out-Null
+          # PR #53's 20-second CDP timeout was hit on this exact Windows runner
+          # during its 20k trial. Increase only the test-driver timeout in this
+          # disposable checkout; no tracked React code or benchmark math changes.
+          $driver = "react-baseline/frontend/src/features/measurements/browserDriver.mjs"
+          $source = Get-Content $driver -Raw
+          if (-not $source.Contains("}, 20000);")) {
+              throw "CDP driver has drifted; abort unverified benchmark"
+          }
+          [System.IO.File]::WriteAllText((Resolve-Path $driver), $source.Replace("}, 20000);", "}, 120000);"))
           $env:XCP_BENCH_OUTPUT = Join-Path (Resolve-Path artifacts/native-gui) "react-uplot-20000.json"
           node react-baseline/frontend/src/features/measurements/live-view.bench.mjs
           if ($LASTEXITCODE -ne 0) { throw "React 20k benchmark failed" }
