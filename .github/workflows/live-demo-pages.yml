@@ -1,0 +1,50 @@
+name: Publish browser-only Live View demo
+on:
+  push:
+    branches: [main]
+    paths:
+      - frontend/**
+      - .github/workflows/live-demo-pages.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: browser-demo-pages
+  cancel-in-progress: false
+
+jobs:
+  demo:
+    name: Build and stage GitHub Pages preview
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Verify frontend tests
+        working-directory: frontend
+        run: npm test
+      - name: Build isolated browser demo (no native ECU transport)
+        working-directory: frontend
+        env:
+          VITE_DEMO: '1'
+        run: npm run build
+      - name: Prevent accidental native or secret artifacts
+        shell: bash
+        run: |
+          test -f frontend/dist/index.html
+          test ! -e frontend/dist/.env
+          grep -q '/xcp-studio/assets/' frontend/dist/index.html
+      - name: Publish static site into gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./frontend/dist
+          publish_branch: gh-pages
+          force_orphan: true
+          enable_jekyll: false
