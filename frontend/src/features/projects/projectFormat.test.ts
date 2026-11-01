@@ -156,7 +156,12 @@ describe("T-0010 project file codec", () => {
     const tooLarge = "x".repeat(PROJECT_MAX_BYTES + 1);
     expect(() => importProject(tooLarge)).toThrow(ProjectFileError);
     const project = fixture();
-    project.name = "ü".repeat(PROJECT_MAX_BYTES / 2);
+    for (let i = 3; i < 2048; i++) {
+      project.signals.push({
+        ...project.signals[0], id: "extra-" + i,
+        name: "x".repeat(256), variablePath: "v".repeat(1024),
+      });
+    }
     expect(() => exportProject(project)).toThrow(ProjectFileError);
   });
 
