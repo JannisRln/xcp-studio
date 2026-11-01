@@ -7,25 +7,48 @@ import { useAcquisition } from "./useAcquisition";
 
 type Props = {
   connected: boolean;
+  connecting?: boolean;
+  onConnect?: () => Promise<void>;
   signals: SignalDefinition[];
   onRemove: (id: string) => void;
   selectedIds: string[];
   onToggle: (id: string) => void;
 };
 
-export function MeasurementsPage({ connected, signals, onRemove, selectedIds, onToggle }: Props) {
+const indicatorText = {
+  live: "Receiving live samples",
+  stale: "No recent samples",
+  waiting: "Waiting for first sample",
+  connecting: "Connecting live stream",
+  disconnected: "Live view stopped",
+  error: "Live connection interrupted",
+} as const;
+
+function formatAge(ageMs: number | null): string {
+  if (ageMs === null) return "—";
+  return ageMs < 1000 ? `${Math.floor(ageMs)} ms` : `${(ageMs / 1000).toFixed(1)} s`;
+}
+
+export function MeasurementsPage({
+  connected, connecting = false, onConnect, signals, onRemove, selectedIds, onToggle,
+}: Props) {
   const [filter, setFilter] = useState("");
   const [intervalMs, setIntervalMs] = useState(100);
   const acquisition = useAcquisition(connected);
-  const active = useMemo(() => signals.filter(s => selectedIds.includes(s.id)), [signals, selectedIds]);
-  const visible = signals.filter(s => s.name.toLowerCase().includes(filter.toLowerCase()) ||
-    formatAddress(s.address).toLowerCase().includes(filter.toLowerCase()));
-  const latest = acquisition.latest;
+  const active = useMemo(() => signals.filter(signal => selectedIds.includes(signal.id)),
+    [signals, selectedIds]);
+  const visible = useMemo(() => signals.filter(signal =>
+    signal.name.toLowerCase().includes(filter.toLowerCase()) ||
+    formatAddress(signal.address).toLowerCase().includes(filter.toLowerCase())),
+  [signals, filter]);
+
   const backendRunning = acquisition.status?.state === "running";
-  const displaySignals = acquisition.status &&
-    (backendRunning || acquisition.frames.length > 0)
+  const busy = acquisition.state === "connecting";
+  const latest = acquisition.latest;
+  const signalSet = acquisition.status && (backendRunning || acquisition.frames.length > 0)
     ? acquisition.status.signals.map((signal, index) => {
-      const configured = signals.find(item => item.name === signal.name && item.address === signal.address);
+      const configured = signals.find(item => item.name === signal.name &&
+        item.address === signal.address && item.value_type === signal.value_type);
       return configured ?? {
         id: `${signal.name}@${signal.address.toString(16)}`,
         name: signal.name,
@@ -34,77 +57,146 @@ export function MeasurementsPage({ connected, signals, onRemove, selectedIds, on
         unit: "",
         color: palette[index % palette.length],
       };
-    }) : active;
-  const busy = acquisition.state === "connecting" || acquisition.state === "streaming";
+    })
+    : active;
 
-  return <div className="workspace-stack">
-    <div className="stats-row">
-      <div className="stat-tile"><span>ACQUISITION</span><strong>{acquisition.state.toUpperCase()}</strong><small>{acquisition.status?.acquisition_id ?? "No active acquisition"}</small></div>
-      <div className="stat-tile"><span>RECEIVED FRAMES</span><strong>{acquisition.received.toLocaleString()}</strong><small>From this browser connection</small></div>
-      <div className="stat-tile"><span>BUFFERED</span><strong>{acquisition.frames.length}</strong><small>Browser preview, maximum 2,000</small></div>
-      <div className="stat-tile"><span>GAP / LOST EVENTS</span><strong>{acquisition.dropped}</strong><small>Detected subscriber overflow</small></div>
-    </div>
-    <div className="toolbar panel">
-      <div className="toolbar-group"><label htmlFor="interval">Sample interval</label>
-        <select id="interval" value={intervalMs} disabled={backendRunning || busy}
-          onChange={e => setIntervalMs(Number(e.target.value))}>
-          {[20, 50, 100, 200, 500, 1000].map(ms => <option key={ms} value={ms}>{ms} ms</option>)}
-        </select>
-      </div>
-      <div className="toolbar-actions">
-        {backendRunning
-          ? <>
-              <button className="button danger" type="button" onClick={() => void acquisition.stop()}>Stop backend acquisition</button>
-              {acquisition.state === "error" &&
-                <button className="button primary" type="button" onClick={() => void acquisition.reattach()}>Reattach live view</button>}
-            </>
-          : <button className="button primary" type="button" disabled={!connected || !active.length || busy}
-              onClick={() => void acquisition.start(active, intervalMs)}>Start backend acquisition</button>}
-        <button className="button" type="button" disabled={!busy || acquisition.state !== "streaming"}
-          onClick={acquisition.togglePause}>{acquisition.paused ? "Resume chart" : "Pause chart"}</button>
-        <button className="button" type="button" disabled={!acquisition.frames.length} onClick={() =>
-          downloadText("xcp-acquisition-preview.csv", acquisitionCsv(acquisition.frames, displaySignals))}>Export buffered CSV</button>
-        <button className="button" type="button" disabled={!acquisition.frames.length} onClick={acquisition.clear}>Clear preview</button>
-      </div>
-    </div>
-    {acquisition.error && <div className="error-banner" role="alert">{acquisition.error}</div>}
-    <p className="muted" role="status">The backend owns one shared XCP polling acquisition. Closing this view does not stop it.
-      Export contains only the bounded browser preview, not a complete durable recording.
-      {acquisition.paused ? " Chart rendering is paused; backend acquisition continues." : ""}
-      {acquisition.status?.state === "running"
-        ? ` Acquisition sequence: ${acquisition.status.sequence}; interval: ${acquisition.status.interval_ms} ms.`
-        : ""}
-    </p>
-    <div className="measure-grid">
-      <section className="panel signal-browser">
-        <div className="panel-heading"><div><h2>Signal selection</h2><p>{active.length} selected / {signals.length} configured</p></div></div>
-        <input className="field" aria-label="Filter signals" placeholder="Search signals or address..." value={filter}
-          onChange={e => setFilter(e.target.value)} />
-        <div className="signal-rows">{visible.map(signal => <div className="signal-select-row" key={signal.id}>
-          <label><input type="checkbox" checked={selectedIds.includes(signal.id)} disabled={backendRunning} onChange={() => onToggle(signal.id)} />
-            <span className="signal-color" style={{ background: signal.color }} />
-            <span><strong>{signal.name}</strong><small>{formatAddress(signal.address)} · {signal.value_type} {signal.unit}</small></span>
-          </label>
-          <button className="text-button" type="button" disabled={backendRunning} aria-label={`Remove ${signal.name}`} onClick={() => onRemove(signal.id)}>×</button>
-        </div>)}
-          {!visible.length && <p className="muted">No matching signals. Add variables from Symbol Browser.</p>}
+  const live = acquisition.indicator === "live";
+  const showExisting = backendRunning && acquisition.state !== "streaming";
+
+  return <div className="workspace-stack live-workspace">
+    <section className={`panel live-hero live-hero--${acquisition.indicator}`} aria-label="Live measurement status">
+      <div className="live-hero-heading">
+        <div>
+          <div className="live-hero-kicker"><span className="live-beacon" aria-hidden="true" />
+            LIVE VIEW <span className="live-hero-mode">SIMULATED ECU · XCP polling</span></div>
+          <h2>{indicatorText[acquisition.indicator]}</h2>
+          <p>{!connected
+            ? "Connect the ECU simulator to view measurements as they arrive."
+            : backendRunning
+              ? `Backend acquisition ${acquisition.status?.acquisition_id ?? ""} · ${acquisition.status?.interval_ms ?? intervalMs} ms requested interval`
+              : "Choose your signals and start a live measurement. No recording is required."}
+          </p>
         </div>
-      </section>
-      <div className="workspace-stack">
-        <TimeSeriesChart frames={acquisition.frames} signals={displaySignals} title={acquisition.paused ? "Paused visualization" : "Live acquisition"} />
-        <section className="panel">
-          <div className="panel-heading"><div><h2>Latest values</h2><p>Decoded from XCP ECU memory</p></div>
-            <span className="muted">{latest ? new Date(latest.timestamp_ms).toLocaleTimeString() : "No samples"}</span></div>
-          <div className="value-grid">{displaySignals.map(signal => {
-            const value = latest?.samples.find(sample => sample.name === signal.name && sample.address === signal.address)?.value;
-            return <div className="value-tile" key={signal.id}>
-              <span><i style={{ background: signal.color }} />{signal.name}</span>
-              <strong>{value === undefined ? "—" : Number(value.toPrecision(7)).toLocaleString()} <small>{signal.unit}</small></strong>
-              <small>{formatAddress(signal.address)} · {signal.value_type}</small>
-            </div>;
-          })}</div>
-        </section>
+        <div className="live-hero-actions">
+          {!connected
+            ? <button className="button primary live-primary-action" type="button"
+                disabled={connecting || !onConnect} onClick={() => void onConnect?.()}>
+                {connecting ? "Connecting…" : "Connect simulator"}</button>
+            : backendRunning
+              ? <>
+                  <button className="button danger" type="button"
+                    onClick={() => void acquisition.stop()}>Stop acquisition</button>
+                  {showExisting && <button className="button primary live-primary-action"
+                    type="button" disabled={busy} onClick={() => void acquisition.reattach()}>
+                    {busy ? "Reconnecting…" : "Reconnect Live View"}</button>}
+                </>
+              : <button className="button primary live-primary-action" type="button"
+                  disabled={!active.length || busy}
+                  onClick={() => void acquisition.start(active, intervalMs)}>
+                  {busy ? "Starting…" : "Start Live View"}</button>}
+        </div>
       </div>
-    </div>
+      <div className="live-metrics" aria-label="Live stream metrics">
+        <div><span>STREAM</span><strong className={live ? "live-metric-good" : ""}>
+          {acquisition.indicator.toUpperCase()}</strong><small>{connected ? "XCP simulator connected" : "ECU disconnected"}</small></div>
+        <div><span>RECEIVED RATE</span><strong>{acquisition.receiveHz.toFixed(1)} <em>Hz</em></strong>
+          <small>Measured in this browser</small></div>
+        <div><span>LAST SAMPLE</span><strong>{formatAge(acquisition.sampleAge)}</strong>
+          <small>{acquisition.indicator === "stale" ? "Stream is stalled" : "Age since browser receipt"}</small></div>
+        <div><span>MISSING EVENTS</span><strong>{acquisition.dropped.toLocaleString()}</strong>
+          <small>Subscriber gaps detected</small></div>
+      </div>
+      <div className="live-toolbar">
+        <label htmlFor="live-sample-interval">Requested update interval
+          <select id="live-sample-interval" value={intervalMs} disabled={backendRunning || busy}
+            onChange={event => setIntervalMs(Number(event.target.value))}>
+            {[20, 50, 100, 200, 500, 1000].map(ms =>
+              <option key={ms} value={ms}>{ms} ms</option>)}
+          </select>
+        </label>
+        <button className="button small" type="button"
+          disabled={acquisition.state !== "streaming"}
+          onClick={acquisition.togglePause}>
+          {acquisition.paused ? "Resume chart" : "Pause chart"}</button>
+        <span className="muted">{acquisition.paused
+          ? "Chart frozen; latest values continue updating."
+          : "Live chart and values update from the backend."}</span>
+      </div>
+    </section>
+
+    {acquisition.error && <div className="error-banner" role="alert">
+      {acquisition.error}
+      {connected && acquisition.status?.state !== "failed" &&
+        <button className="button small" type="button"
+          disabled={busy} onClick={() => void acquisition.reattach()}>
+          Retry connection now</button>}
+    </div>}
+
+    <TimeSeriesChart frames={acquisition.frames} signals={signalSet}
+      title={acquisition.paused ? "Live chart · paused" : "Live signal trends"} />
+
+    <section className="panel" aria-label="Latest ECU values">
+      <div className="panel-heading">
+        <div><h2>Live signal values</h2>
+          <p>Values decoded from XCP memory · no synthetic frontend data</p></div>
+        <span className="muted">{latest
+          ? `Last XCP batch · ${new Date(latest.timestamp_ms).toLocaleTimeString()}`
+          : "Waiting for measurements"}</span>
+      </div>
+      <div className="value-grid">{signalSet.map(signal => {
+        const sample = latest?.samples.find(item => item.name === signal.name &&
+          item.address === signal.address);
+        const stale = !live || !sample;
+        return <div className={stale ? "value-tile live-value-stale" : "value-tile live-value-fresh"}
+          key={signal.id}>
+          <span><i style={{ background: signal.color }} />{signal.name}
+            <small className="live-value-quality">{!connected ? "DISCONNECTED"
+              : !sample ? "NO DATA" : !live ? "STALE" : "LIVE"}</small></span>
+          <strong>{sample ? Number(sample.value.toPrecision(7)).toLocaleString() : "—"}
+            <small> {signal.unit}</small></strong>
+          <small>{formatAddress(signal.address)} · {signal.value_type}</small>
+        </div>;
+      })}
+        {!signalSet.length && <div className="empty-state">
+          No signals selected. Choose signals below or import an ELF in Symbol Browser.
+        </div>}
+      </div>
+    </section>
+
+    <section className="panel signal-browser" aria-label="Live signal configuration">
+      <div className="panel-heading">
+        <div><h2>Signal selection</h2>
+          <p>{active.length} selected / {signals.length} configured · can be changed between acquisitions</p></div>
+        <span className="muted">{backendRunning ? "Locked while acquiring" : "Ready to configure"}</span>
+      </div>
+      <input className="field" aria-label="Filter signals" placeholder="Filter signal names or addresses…"
+        value={filter} onChange={event => setFilter(event.target.value)} />
+      <div className="live-signal-list">{visible.map(signal =>
+        <div className="signal-select-row" key={signal.id}>
+          <label><input type="checkbox" checked={selectedIds.includes(signal.id)}
+              disabled={backendRunning} onChange={() => onToggle(signal.id)} />
+            <span className="signal-color" style={{ background: signal.color }} />
+            <span><strong>{signal.name}</strong>
+              <small>{formatAddress(signal.address)} · {signal.value_type} {signal.unit}</small></span>
+          </label>
+          <button className="text-button" type="button" disabled={backendRunning}
+            aria-label={`Remove ${signal.name}`} onClick={() => onRemove(signal.id)}>×</button>
+        </div>)}
+        {!visible.length && <p className="muted">No matching signals. Add variables from Symbol Browser.</p>}
+      </div>
+    </section>
+
+    <details className="panel live-secondary">
+      <summary>Optional: export recent live samples</summary>
+      <p className="muted">Export contains only the {acquisition.frames.length} recent frames retained
+        by this browser (maximum 2,000). It is not a full backend recording.</p>
+      <div className="toolbar-actions">
+        <button className="button" type="button" disabled={!acquisition.frames.length}
+          onClick={() => downloadText("xcp-live-preview.csv",
+            acquisitionCsv(acquisition.frames, signalSet))}>Export recent CSV</button>
+        <button className="button" type="button" disabled={!acquisition.frames.length}
+          onClick={acquisition.clear}>Clear chart preview</button>
+      </div>
+    </details>
   </div>;
 }
