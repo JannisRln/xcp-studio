@@ -1,11 +1,11 @@
 ---
 id: T-0010
 title: Versioned project files and workspace restoration
-status: blocked
+status: in-progress
 priority: P1
 area: projects
-owner: unassigned
-branch: none
+owner: chatgpt-agent
+branch: feature/T-0010-versioned-project-core
 github_issue: 13
 depends_on: [T-0002, T-0012]
 requirements: [UI-006, PROJ-001, PROJ-002, PROJ-003, PROJ-004, PROJ-005]
@@ -56,6 +56,14 @@ Workspace signal and chart state is not persisted as a versioned project format.
 - Linked GitHub issue: [#13](https://github.com/JannisRln/xcp-studio/issues/13).
 - Changes to shared interfaces require contract-first coordination and an ADR if architecture changes.
 - Agent must claim ownership in this ticket and update INDEX.md before overlapping code edits.
+
+## Isolated core phase (this branch)
+
+- Branch owner: chatgpt-agent; project-file core under `frontend/src/features/projects/`.
+- Added v2 JSON model and strict import/export, explicit v1-to-v2 in-memory migration, size and secret-key rejection, file-fingerprint reconciliation and Vitest cases.
+- Dependency status: T-0012 is only partially implemented; do not integrate shared DTOs or AppShell until contract coordination.
+- **Not implemented:** atomic durable saves, project UI workflow, browser E2E reopen, real ECU source verification and server-backed restoration.
+- Requirement completion remains blocked on integration, CI and fault-injection evidence; this is not full T-0010 acceptance.
 
 ## Evidence and completion
 
