@@ -5,7 +5,7 @@ import {
   type AcquisitionSamplesEvent, type AcquisitionStatus,
 } from "../../core/acquisitionV1";
 import { VersionedApiError } from "../../core/apiV1";
-import { enqueuePreviewFrame } from "./frameQueue";
+import { PreviewFrameQueue } from "./frameQueue";
 import {
   freshnessLimitMs, liveIndicator, measuredReceiveHz, recentReceiveTimes,
   reconnectDelayMs, sampleAgeMs, skippedSequences,
@@ -68,15 +68,14 @@ export function useAcquisition(connected: boolean) {
   const lastReceivedAtRef = useRef<number | null>(null);
   const connectionOpenedAt = useRef<number | null>(null);
   const requestVersion = useRef(0);
-  const queuedFrames = useRef<MeasurementFrame[]>([]);
+  const queuedFrames = useRef(new PreviewFrameQueue(MAX_BUFFER));
   const latestFrameRef = useRef<MeasurementFrame | null>(null);
   const batchTimer = useRef<number | null>(null);
   const receivedRef = useRef(0);
 
   const flushUi = useCallback(() => {
     batchTimer.current = null;
-    const batch = queuedFrames.current;
-    queuedFrames.current = [];
+    const batch = queuedFrames.current.drain();
     if (batch.length) setFrames(previous => appendFrames(previous, batch));
     setLatest(latestFrameRef.current);
     setReceived(receivedRef.current);
@@ -116,7 +115,7 @@ export function useAcquisition(connected: boolean) {
     lastSequence.current = null;
     pendingDrops.current = 0;
     rateTimes.current = [];
-    queuedFrames.current = [];
+    queuedFrames.current.clear();
     latestFrameRef.current = null;
     receivedRef.current = 0;
     if (batchTimer.current !== null) {
@@ -201,7 +200,7 @@ export function useAcquisition(connected: boolean) {
           rateTimes.current = recentReceiveTimes(rateTimes.current, now);
           latestFrameRef.current = frame;
           receivedRef.current++;
-          if (!pausedRef.current) enqueuePreviewFrame(queuedFrames.current, frame, MAX_BUFFER);
+          if (!pausedRef.current) queuedFrames.current.push(frame);
           queueUi();
         } else if (event.type === "gap") {
           pendingDrops.current += event.dropped;
