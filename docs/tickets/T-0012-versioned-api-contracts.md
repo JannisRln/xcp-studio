@@ -77,6 +77,8 @@ The baseline endpoints are unversioned. Merged PR #22 added an additive **v1 HTT
 
 ## Post-merge contract review and acceptance gate — 2026-11-01
 
+**Blocker:** Explicit independent T-0005 acquisition-backend and T-0006 Live View frontend owner acceptance of the additive v1 contract is not yet recorded in issue #8. This is an acceptance gate, not an unmerged implementation dependency.
+
 - [PR #46](https://github.com/JannisRln/xcp-studio/pull/46) is merged on `main` at `ee793a86119049f4400afc18193b4bd2135a1d44`; Windows pre-merge CI [41323689344](https://github.com/JannisRln/xcp-studio/actions/runs/41323689344) and post-merge main CI [41324320683](https://github.com/JannisRln/xcp-studio/actions/runs/41324320683) passed Rust, frontend, documentation, and live simulator E2E jobs.
 - The additive optional fields represent **host-after-read** time (`timestamp_origin=host_utc_after_reads`), acquisition-relative monotonic time (`monotonic_clock=acquisition_elapsed`), `quality=valid` only for finite successful simulator decoding, `address_origin=manual` only for user-provided addresses, and `gap.scope=subscriber` for subscriber loss (not ECU DAQ loss). These are not hardware-grade timing/quality or runtime address verification.
 - The reviewed GitHub PR has a COMMENTED review, but **no independent T-0005 backend and T-0006 frontend owner sign-off**. This acceptance dependency is explicitly recorded in issue #8.
