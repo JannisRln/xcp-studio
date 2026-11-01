@@ -166,3 +166,14 @@ select { width: auto; }
 .workspace-error p { max-width: 700px; color: #c7d2e3; line-height: 1.6; }
 .workspace-error .button { margin-top: 12px; }
 .page-heading h1:focus { outline: 2px solid #6ebeff; outline-offset: 7px; border-radius: 4px; }
+
+/* Measurement time chart controls and per-unit cursor inspector. */
+.chart-controls { align-items: end; margin: -4px 0 18px; }
+.chart-controls .field-group { flex: 0 1 210px; }
+.chart-scroll { border-radius: 8px; background: #111b29; }
+.chart-scroll .timeseries { display: block; }
+.chart-cursor-values { display: flex; gap: 10px 16px; flex-wrap: wrap; align-items: center; min-height: 47px; padding: 13px 4px; border-bottom: 1px solid #29394c; color: #b9cce4; font-size: 11px; }
+.chart-cursor-values strong { white-space: nowrap; color: #e2f0ff; }
+.chart-cursor-values > span:not(.muted) { display: inline-flex; align-items: center; gap: 6px; }
+.chart-cursor-values i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.chart-cursor-values .muted { margin: 0; }
