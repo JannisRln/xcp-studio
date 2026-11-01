@@ -136,8 +136,8 @@ fn expired_queued_write_is_never_dispatched_after_inflight_timeout() {
     assert!(entered.load(Ordering::Acquire));
 
     let writer = session.clone().with_timeout(Duration::from_millis(15));
-    assert!(matches!(writer.write(0x1020, &[0xaa]), Err(SessionError::Timeout)));
-    assert!(matches!(reader.join().unwrap(), Err(SessionError::Timeout)));
+    assert!(matches!(writer.write(0x1020, &[0xaa]), Err(SessionError::Xcp(XcpError::DeadlineExceeded))));
+    assert!(matches!(reader.join().unwrap(), Err(SessionError::Xcp(XcpError::DeadlineExceeded))));
     assert_eq!(session.state().unwrap(), SessionState::Faulted);
     drop(actor);
 
