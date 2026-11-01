@@ -34,7 +34,20 @@ export function App() {
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [workspace, setWorkspace] = useState(initialSignalWorkspace);
+  const [workspace, setWorkspace] = useState(() => {
+    const initial = initialSignalWorkspace();
+    if (import.meta.env.MODE !== "pages") return initial;
+    const extra = [
+      { id: "demo-torque", name: "Torque", address: 0x1008,
+        value_type: "f32" as const, unit: "Nm", color: "#8ce0bd" },
+      { id: "demo-throttle", name: "Throttle", address: 0x100c,
+        value_type: "f32" as const, unit: "%", color: "#c4a0ff" },
+    ];
+    return {
+      signals: [...initial.signals, ...extra],
+      selectedIds: [...initial.selectedIds, ...extra.map(item => item.id)],
+    };
+  });
   const { signals, selectedIds } = workspace;
   const [events, setEvents] = useState<string[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -106,7 +119,7 @@ export function App() {
         </button>)}</nav>
       <div className="sidebar-footer"><div><span className={connected ? "connection-light on" : "connection-light"} />
         <strong>{connected ? "XCP connected" : "XCP disconnected"}</strong></div>
-        <p>Simulation mode · v0.1</p></div>
+        <p>{import.meta.env.MODE === "pages" ? "Browser demo · synthetic data" : "Simulation mode · v0.1"}</p></div>
     </aside>
     <div className="studio-main">
       <header className="studio-topbar">
@@ -121,7 +134,13 @@ export function App() {
       <main className="studio-content">
         <div className="page-heading"><div><div className="eyebrow">XCP STUDIO / {page.toUpperCase()}</div>
           <h1 ref={headingRef} tabIndex={-1}>{page === "Measurements" ? "Live View" : page === "Symbols" ? "Symbol Browser" : page}</h1><p>{descriptions[page]}</p></div>
-          <span className="mode-badge">SIMULATION MODE</span></div>
+          <span className="mode-badge">{import.meta.env.MODE === "pages"
+            ? "BROWSER DEMO · NO REAL ECU" : "SIMULATION MODE"}</span></div>
+        {import.meta.env.MODE === "pages" && <div className="demo-notice" role="status">
+          <strong>Interactive browser preview</strong> — all live signals are generated locally.
+          No Rust server, CAN interface or physical ECU is connected.
+          Changes remain in this browser tab.
+        </div>}
         {error && <div className="error-banner" role="alert">{error} <button type="button" className="button small" onClick={() => void refresh()}>Retry API</button></div>}
         <AppErrorBoundary key={page} onRecover={() => void refresh()}>
         {page === "Overview" && <OverviewPage health={health} connected={connected} signals={signals} onNavigate={navigate} />}
