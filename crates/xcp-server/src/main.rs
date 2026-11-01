@@ -385,6 +385,93 @@ mod snapshot_tests {
         assert_eq!(SnapshotValueType::F32.decode(&bytes), 88.5);
     }
 
+    #[tokio::test]
+    async fn actor_backed_routes_connect_measure_and_disconnect() {
+        let actor = simulated_session_actor().unwrap();
+        let session = actor.handle();
+
+        assert!(!session_status(State(session.clone())).await.0.connected);
+        assert!(session_connect(State(session.clone())).await.unwrap().0.connected);
+
+        let read = session_read(
+            State(session.clone()),
+            Json(ReadRequest {
+                address: 0x1000,
+                count: 4,
+            }),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert_eq!(read.bytes, 1850u32.to_le_bytes());
+
+        let snapshot = session_snapshot(
+            State(session.clone()),
+            Json(SnapshotRequest {
+                signals: vec![
+                    SnapshotSignalRequest {
+                        name: "Engine speed".into(),
+                        address: 0x1000,
+                        value_type: SnapshotValueType::U32,
+                    },
+                    SnapshotSignalRequest {
+                        name: "Coolant".into(),
+                        address: 0x1004,
+                        value_type: SnapshotValueType::F32,
+                    },
+                ],
+            }),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert_eq!(snapshot.samples.len(), 2);
+        assert_eq!(snapshot.samples[0].value, 1850.0);
+        assert_eq!(snapshot.samples[1].value, 88.5);
+
+        assert!(!session_disconnect(State(session.clone())).await.unwrap().0.connected);
+        let failure = session_read(
+            State(session),
+            Json(ReadRequest {
+                address: 0x1000,
+                count: 4,
+            }),
+        )
+        .await
+        .expect_err("disconnected actor must reject reads");
+        assert!(failure.1 .0.error.contains("not connected"));
+    }
+
+    #[tokio::test]
+    async fn parallel_actor_backed_reads_do_not_corrupt_mta() {
+        let actor = simulated_session_actor().unwrap();
+        let session = actor.handle();
+        session_connect(State(session.clone())).await.unwrap();
+        let tasks: Vec<_> = (0..16)
+            .map(|_| {
+                let current = session.clone();
+                tokio::spawn(async move {
+                    for _ in 0..16 {
+                        let rpm = session_read(
+                            State(current.clone()),
+                            Json(ReadRequest {
+                                address: 0x1000,
+                                count: 4,
+                            }),
+                        )
+                        .await
+                        .unwrap()
+                        .0;
+                        assert_eq!(rpm.bytes, 1850u32.to_le_bytes());
+                    }
+                })
+            })
+            .collect();
+        for task in tasks {
+            task.await.unwrap();
+        }
+    }
+
     #[test]
     fn decodes_signed_values() {
         assert_eq!(SnapshotValueType::I16.decode(&(-123i16).to_le_bytes()), -123.0);
