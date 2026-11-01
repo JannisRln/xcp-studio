@@ -351,6 +351,20 @@ pub async fn create(
     Ok((StatusCode::CREATED, Json(run.status())))
 }
 
+/// Return the last backend acquisition so a browser can reattach after reload.
+pub async fn current(
+    Extension(service): Extension<Arc<AcquisitionService>>,
+) -> Result<Json<AcquisitionStatus>, ApiFailure> {
+    let current = service.current.lock().unwrap_or_else(|e| e.into_inner());
+    let run = current.as_ref().ok_or_else(|| error(
+        StatusCode::NOT_FOUND,
+        "ACQUISITION_NOT_FOUND",
+        "no acquisition has been created",
+        false,
+    ))?;
+    Ok(Json(run.status()))
+}
+
 pub async fn status(
     Path(id): Path<String>,
     Extension(service): Extension<Arc<AcquisitionService>>,
