@@ -1,3 +1,5 @@
+// T-0016 staged core: producers are intentionally not wired before contract review.
+#[allow(dead_code)]
 mod diagnostics;
 mod security;
 mod hardware_policy;
