@@ -119,6 +119,27 @@ export class DemoBackend {
   private nextId = 0;
   private current: Run | null = null;
 
+  constructor(autoStart = false) {
+    // The public preview opens with moving sample data already visible.
+    // It never connects to real CAN/XCP hardware.
+    if (autoStart) {
+      this.connected = true;
+      const signals: AcquisitionSignal[] = [
+        { name: "Engine speed", address: 4096, value_type: "u32" },
+        { name: "Coolant temperature", address: 4100, value_type: "f32" },
+      ];
+      const status: AcquisitionStatus = {
+        schema_version: 1, acquisition_id: "demo-acq-" + (++this.nextId),
+        state: "running", sampling_mode: "polling", interval_ms: 100,
+        signal_count: signals.length, signals, sequence: 0,
+        subscriber_count: 0, dropped_subscriber_frames: 0, error: null,
+      };
+      const run: Run = { status, started: performance.now(), timer: 0, sockets: new Set() };
+      this.current = run;
+      run.timer = window.setInterval(() => this.emit(), 100);
+    }
+  }
+
   openSocket(url: string): WebSocket {
     return new DemoSocket(url, this) as unknown as WebSocket;
   }
@@ -261,7 +282,7 @@ export class DemoBackend {
 }
 
 export function installBrowserDemo(): () => void {
-  const backend = new DemoBackend();
+  const backend = new DemoBackend(true);
   const originalFetch = window.fetch;
   const originalWebSocket = window.WebSocket;
   window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
