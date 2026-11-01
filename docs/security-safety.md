@@ -14,14 +14,20 @@
 
 | Surface | Minimum target control | Prototype note |
 | --- | --- | --- |
-| HTTP API | Loopback bind; clear max request sizes and timeouts | Server binds 127.0.0.1:8080; ELF upload limit 32 MiB |
+| HTTP API | Loopback bind; clear max request sizes and timeouts | Server binds 127.0.0.1:8080; ELF upload limit 32 MiB; T-0013 adds loopback Host and local Origin guard |
 | ELF/DWARF/A2L | Size, recursion, section offset and location-expression limits | ELF size limit exists; parser must still be hardened |
-| WebSocket | Origin policy, max message size, max clients, bounded queues, heartbeat and safe close | Per-client polling exists; full quota/origin review is outstanding |
+| WebSocket | Origin policy, max message size, max clients, bounded queues, heartbeat and safe close | T-0013 adds local Origin guard and 16 KiB frame/message limits; shared acquisition has 16 subscriber/128-event limits, legacy connection quotas still pending |
 | XCP session | Resource/capability checks, serialized commands, positive outcome verification | Prototype session is mutex-based and simulator-first |
 | Hardware | Explicit physical target selection, read-only default, no simulation fallback | UI hardware selection not production-ready |
 | Calibration | Preview, confirmation, range validation, readback, audit and unknown-result state | No guarded public write API yet |
 | Storage | Atomic project saves, disk caps, redaction and no secrets | Versioned storage pending |
 | Remote access | Authentication, authorization, TLS, CSRF/WS origin protection, threat review | **Do not expose remotely** before milestone |
+
+### Browser origin and local Host policy (T-0013)
+
+All API routes, including WebSocket upgrades, reject non-loopback Host headers and browser Origin values other than `http://localhost:5173`, `http://127.0.0.1:5173`, `http://localhost:8080`, `http://127.0.0.1:8080` (plus HTTPS on local port 5173 for TLS dev proxies). `Sec-Fetch-Site: cross-site` requests are denied. This reduces risks from malicious websites controlling a workstation's localhost API and DNS rebinding. CLI requests without an Origin are allowed only with a loopback Host header.
+
+**Important:** Host/Origin policy is not authentication. If remote access, multi-user operation, non-default Vite ports, or a desktop WebView origin is needed, design a new, reviewed security profile rather than relaxing checks or binding to all interfaces. Protected physical ECU writes still require explicit user enablement and separate tests.
 
 ## 3. Calibration safety policy
 
