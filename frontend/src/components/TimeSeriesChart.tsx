@@ -3,6 +3,17 @@ import type { MeasurementFrame, SignalDefinition } from "../core/api";
 import { groupSignalsByUnit } from "./chartMath";
 import { LiveRingBuffer } from "./liveRingBuffer";
 
+/** Convert a backend signal into timestamp/value pairs for export and tests. */
+export function chartPoints(frames: MeasurementFrame[], signal: SignalDefinition):
+  Array<{ t: number; y: number }> {
+  return frames.flatMap(frame => {
+    const sample = frame.samples.find(value =>
+      value.name === signal.name && value.address === signal.address);
+    return sample && Number.isFinite(sample.value)
+      ? [{ t: frame.timestamp_ms, y: sample.value }] : [];
+  });
+}
+
 type Props = {
   frames: MeasurementFrame[];
   signals: SignalDefinition[];
