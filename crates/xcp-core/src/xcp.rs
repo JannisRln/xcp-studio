@@ -74,10 +74,6 @@ impl<T: CanTransport> XcpMaster<T> {
         self
     }
 
-    fn request(&mut self, command: &[u8]) -> Result<Vec<u8>, XcpError> {
-        self.request_until(command, None)
-    }
-
     /// Use the earlier of the per-CTO response timeout and the actor deadline.
     /// Hardware transports must honor receive_with_timeout for this to be a
     /// strict wall-clock bound; a synchronous blocked driver cannot be preempted.
