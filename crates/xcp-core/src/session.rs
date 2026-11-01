@@ -36,10 +36,6 @@ pub enum SessionError {
     Faulted,
     #[error("XCP session worker is no longer available")]
     WorkerStopped,
-    #[error("XCP command queue is full")]
-    QueueFull,
-    #[error("XCP command deadline exceeded; the ECU outcome may be unknown")]
-    Timeout,
     #[error(transparent)]
     Xcp(#[from] XcpError),
 }
@@ -116,14 +112,14 @@ impl SessionHandle {
         };
         match self.commands.try_send(command(request)) {
             Ok(()) => {}
-            Err(TrySendError::Full(_)) => return Err(SessionError::QueueFull),
+            Err(TrySendError::Full(_)) => return Err(SessionError::Xcp(XcpError::CommandQueueFull)),
             Err(TrySendError::Disconnected(_)) => return Err(SessionError::WorkerStopped),
         }
         match receiver.recv_timeout(self.timeout) {
             Ok(result) => result,
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 ticket.cancelled.store(true, Ordering::Release);
-                Err(SessionError::Timeout)
+                Err(SessionError::Xcp(XcpError::DeadlineExceeded))
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => Err(SessionError::WorkerStopped),
         }
@@ -229,7 +225,7 @@ fn finish<T>(
 ) -> Result<T, SessionError> {
     if ticket.expired() {
         *state = SessionState::Faulted;
-        return Err(SessionError::Timeout);
+        return Err(SessionError::Xcp(XcpError::DeadlineExceeded));
     }
     result.map_err(|error| {
         if fault_on_error || is_fatal(&error) {
@@ -247,7 +243,7 @@ fn run<T: CanTransport>(mut master: XcpMaster<T>, commands: Receiver<Command>) {
         match command {
             Command::Connect(request) => {
                 if request.ticket.expired() {
-                    request.respond(Err(SessionError::Timeout));
+                    request.respond(Err(SessionError::Xcp(XcpError::DeadlineExceeded)));
                     continue;
                 }
                 if state == SessionState::Connected {
@@ -272,7 +268,7 @@ fn run<T: CanTransport>(mut master: XcpMaster<T>, commands: Receiver<Command>) {
             }
             Command::Disconnect(request) => {
                 if request.ticket.expired() {
-                    request.respond(Err(SessionError::Timeout));
+                    request.respond(Err(SessionError::Xcp(XcpError::DeadlineExceeded)));
                     continue;
                 }
                 if state == SessionState::Disconnected {
@@ -293,7 +289,7 @@ fn run<T: CanTransport>(mut master: XcpMaster<T>, commands: Receiver<Command>) {
                 request,
             } => {
                 if request.ticket.expired() {
-                    request.respond(Err(SessionError::Timeout));
+                    request.respond(Err(SessionError::Xcp(XcpError::DeadlineExceeded)));
                     continue;
                 }
                 let result = ensure_connected(state).and_then(|()| {
@@ -308,7 +304,7 @@ fn run<T: CanTransport>(mut master: XcpMaster<T>, commands: Receiver<Command>) {
                 request,
             } => {
                 if request.ticket.expired() {
-                    request.respond(Err(SessionError::Timeout));
+                    request.respond(Err(SessionError::Xcp(XcpError::DeadlineExceeded)));
                     continue;
                 }
                 let result = ensure_connected(state).and_then(|()| {
@@ -319,7 +315,7 @@ fn run<T: CanTransport>(mut master: XcpMaster<T>, commands: Receiver<Command>) {
             }
             Command::State(request) => {
                 if request.ticket.expired() {
-                    request.respond(Err(SessionError::Timeout));
+                    request.respond(Err(SessionError::Xcp(XcpError::DeadlineExceeded)));
                 } else {
                     request.respond(Ok(state));
                 }
