@@ -7,11 +7,33 @@ pub const ORIGIN_MS: u64 = 1_761_980_000_000;
 pub const PLOT_LIMIT: usize = 1_400;
 pub const WINDOW_MS: u64 = 15_000;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SampleQuality {
+    Synthetic,
+    DecodedValid,
+    LegacyUnverified,
+    Missing,
+    Invalid,
+}
+
+impl SampleQuality {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Synthetic => "SYNTHETIC",
+            Self::DecodedValid => "VALID (decoded)",
+            Self::LegacyUnverified => "UNVERIFIED",
+            Self::Missing => "MISSING",
+            Self::Invalid => "INVALID",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct SampleFrame {
     pub timestamp_ms: u64,
     pub sequence: u64,
     pub values: [Option<f64>; 2],
+    pub quality: [SampleQuality; 2],
     pub gap_before: bool,
 }
 
@@ -24,6 +46,7 @@ impl SampleFrame {
                 Some(if i.is_multiple_of(683) { 8000.0 } else { 1850.0 }),
                 Some(88.5 + (i % 17) as f64 / 10.0),
             ],
+            quality: [SampleQuality::Synthetic; 2],
             gap_before: false,
         }
     }

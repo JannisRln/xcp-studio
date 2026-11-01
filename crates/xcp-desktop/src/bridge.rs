@@ -1,10 +1,14 @@
 //! Optional read-only subscriber to the backend-owned acquisition.
 //! This crate does not create an XCP master, issue a read command, or start acquisition.
 
-use crate::fixture::SampleFrame;
+use crate::fixture::{SampleFrame, SampleQuality};
 use serde_json::Value;
 use std::net::{SocketAddr, TcpStream};
-use std::sync::mpsc::{self, Receiver, SyncSender, TrySendError};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    mpsc::{self, Receiver, SyncSender, TrySendError},
+    Arc,
+};
 use std::time::Duration;
 use tungstenite::client::client_with_config;
 use tungstenite::protocol::WebSocketConfig;
@@ -28,22 +32,37 @@ pub fn valid_acquisition_id(id: &str) -> bool {
 }
 
 /// Only the existing backend broadcast stream is allowed; no HTTP POST, no ECU reads.
-pub fn subscribe(acquisition_id: String) -> Result<Receiver<BridgeEvent>, String> {
+pub struct Subscription {
+    pub events: Receiver<BridgeEvent>,
+    cancel: Arc<AtomicBool>,
+}
+
+impl Drop for Subscription {
+    fn drop(&mut self) {
+        self.cancel.store(true, Ordering::Release);
+    }
+}
+
+pub fn subscribe(acquisition_id: String) -> Result<Subscription, String> {
     if !valid_acquisition_id(&acquisition_id) {
         return Err("invalid acquisition ID (expected acq- with ASCII letters/digits/-/_)".into());
     }
     let (sender, receiver) = mpsc::sync_channel(CHANNEL_DEPTH);
-    std::thread::spawn(move || run(acquisition_id, sender));
-    Ok(receiver)
+    let cancel = Arc::new(AtomicBool::new(false));
+    let worker_cancel = Arc::clone(&cancel);
+    std::thread::spawn(move || run(acquisition_id, sender, worker_cancel));
+    Ok(Subscription { events: receiver, cancel })
 }
 
-fn run(id: String, tx: SyncSender<BridgeEvent>) {
-    if let Err(error) = stream(&id, &tx) {
-        let _ = tx.try_send(BridgeEvent::Error(error));
+fn run(id: String, tx: SyncSender<BridgeEvent>, cancel: Arc<AtomicBool>) {
+    if let Err(error) = stream(&id, &tx, &cancel) {
+        if !cancel.load(Ordering::Acquire) {
+            let _ = tx.try_send(BridgeEvent::Error(error));
+        }
     }
 }
 
-fn stream(id: &str, tx: &SyncSender<BridgeEvent>) -> Result<(), String> {
+fn stream(id: &str, tx: &SyncSender<BridgeEvent>, cancel: &AtomicBool) -> Result<(), String> {
     let address: SocketAddr = SUBSCRIBER_ENDPOINT.parse().map_err(|e| format!("{e}"))?;
     let stream = TcpStream::connect_timeout(&address, Duration::from_secs(2))
         .map_err(|e| format!("loopback backend unavailable: {e}"))?;
@@ -60,6 +79,10 @@ fn stream(id: &str, tx: &SyncSender<BridgeEvent>) -> Result<(), String> {
         .map_err(|e| format!("read-only subscribe failed: {e}"))?;
     let mut dropped_locally: u64 = 0;
     loop {
+        if cancel.load(Ordering::Acquire) {
+            let _ = socket.close(None);
+            break;
+        }
         let message = match socket.read() {
             Ok(message) => message,
             Err(tungstenite::Error::Io(ref error))
@@ -137,6 +160,7 @@ pub fn parse_event(payload: &str, acquisition_id: &str) -> Result<BridgeEvent, S
             let samples = root.get("samples").and_then(Value::as_array)
                 .ok_or("missing sample array")?;
             let mut values = [None, None];
+            let mut quality = [SampleQuality::Missing; 2];
             let mut names = ["Signal A (raw)".to_string(), "Signal B (raw)".to_string()];
             for (i, sample) in samples.iter().take(2).enumerate() {
                 let name = sample.get("name").and_then(Value::as_str)
@@ -145,15 +169,21 @@ pub fn parse_event(payload: &str, acquisition_id: &str) -> Result<BridgeEvent, S
                     return Err("invalid sample name".into());
                 }
                 names[i] = name.to_owned();
-                let quality = sample.get("quality").and_then(Value::as_str);
-                // Missing quality is a legacy/unverified sample, not a validated ECU value.
-                if quality.is_none() || quality == Some("valid") {
-                    values[i] = sample.get("value").and_then(Value::as_f64)
-                        .filter(|v| v.is_finite());
+                let wire_quality = sample.get("quality").and_then(Value::as_str);
+                let finite = sample.get("value").and_then(Value::as_f64)
+                    .filter(|v| v.is_finite());
+                quality[i] = match (wire_quality, finite) {
+                    (Some("valid"), Some(_)) => SampleQuality::DecodedValid,
+                    (None, Some(_)) => SampleQuality::LegacyUnverified,
+                    (Some("valid") | None, None) => SampleQuality::Missing,
+                    _ => SampleQuality::Invalid,
+                };
+                if !matches!(quality[i], SampleQuality::Invalid) {
+                    values[i] = finite;
                 }
             }
             Ok(BridgeEvent::Frame(SampleFrame {
-                timestamp_ms, sequence, values, gap_before: false,
+                timestamp_ms, sequence, values, quality, gap_before: false,
             }, names))
         }
         _ => Err("unsupported acquisition event".into()),
@@ -179,6 +209,7 @@ mod tests {
             BridgeEvent::Frame(frame, names) => {
                 assert_eq!(frame.sequence, 1);
                 assert_eq!(frame.values[0], Some(1850.0));
+                assert_eq!(frame.quality[0], SampleQuality::LegacyUnverified);
                 assert_eq!(names[0], "Engine speed");
             }
             _ => panic!("expected frame"),
@@ -188,12 +219,25 @@ mod tests {
     }
 
     #[test]
+    fn checked_quality_is_not_physical_quality() {
+        let data = include_str!("../../../contracts/v1/acquisition-sample-qualified.json");
+        match parse_event(data, "acq-1").unwrap() {
+            BridgeEvent::Frame(frame, _) =>
+                assert_eq!(frame.quality[0], SampleQuality::DecodedValid),
+            _ => panic!("expected numeric sample"),
+        }
+    }
+
+    #[test]
     fn rejects_wrong_acquisition_and_invalid_values() {
         let sample = include_str!("../../../contracts/v1/acquisition-sample.json");
         assert!(parse_event(sample, "acq-other").is_err());
         let forged = r#"{"schema_version":1,"type":"samples","acquisition_id":"acq-1","sequence":4,"timestamp_ms":42,"samples":[{"name":"x","value":1,"quality":"invalid"}]}"#;
         match parse_event(forged, "acq-1").unwrap() {
-            BridgeEvent::Frame(f, _) => assert_eq!(f.values[0], None),
+            BridgeEvent::Frame(f, _) => {
+                assert_eq!(f.values[0], None);
+                assert_eq!(f.quality[0], SampleQuality::Invalid);
+            },
             _ => panic!("expected frame"),
         }
     }

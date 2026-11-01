@@ -16,7 +16,7 @@ use fixture::{
 };
 use serde_json::Value;
 use std::collections::VecDeque;
-use std::sync::mpsc::{Receiver, TryRecvError};
+use std::sync::mpsc::TryRecvError;
 use std::time::{Duration, Instant};
 
 const MAX_LIVE_FRAMES: usize = 20_000;
@@ -41,7 +41,7 @@ struct DesktopApp {
     dock: DockState<Pane>,
     frames: VecDeque<SampleFrame>,
     source: Source,
-    receiver: Option<Receiver<BridgeEvent>>,
+    receiver: Option<bridge::Subscription>,
     signal_names: [String; 2],
     visible: [bool; 2],
     cursors: [Option<u64>; 2],
@@ -144,7 +144,7 @@ impl DesktopApp {
         };
         // Bound the work in any single UI pass even if the producer is faster.
         for _ in 0..128 {
-            match receiver.try_recv() {
+            match receiver.events.try_recv() {
                 Ok(BridgeEvent::Frame(mut frame, names)) => {
                     if self.last_sequence.is_some_and(|seq| frame.sequence <= seq) {
                         self.pending_gap = true;
@@ -388,6 +388,7 @@ impl Panels<'_> {
             ui.strong("Show");
             ui.strong("Signal");
             ui.strong("Last value");
+            ui.strong("Quality");
             ui.strong("Origin");
             ui.end_row();
             for i in 0..2 {
@@ -397,6 +398,12 @@ impl Panels<'_> {
                     Some(v) => format!("{v:.3}"),
                     None => "MISSING".into(),
                 });
+                let q = self.frames.back()
+                    .map(|frame| frame.quality[i].label()).unwrap_or("WAITING");
+                let color = if q == "VALID (decoded)" { Color32::LIGHT_GREEN }
+                    else if q == "INVALID" || q == "MISSING" { Color32::LIGHT_RED }
+                    else { Color32::YELLOW };
+                ui.colored_label(color, q);
                 ui.label(if self.source == Source::Synthetic { "synthetic" } else { "backend raw" });
                 ui.end_row();
             }
