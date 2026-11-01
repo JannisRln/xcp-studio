@@ -2,6 +2,7 @@
 //! Existing unversioned routes remain supported until consumers migrate.
 
 use super::super::Session;
+use xcp_core::session::{SessionError, SessionState};
 use axum::{
     extract::{rejection::JsonRejection, State},
     http::StatusCode,
@@ -75,7 +76,11 @@ pub struct SessionV1 {
 }
 
 pub async fn status(State(session): State<Session>) -> Json<SessionV1> {
-    let connected = session.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).is_some();
+    let connected = tokio::task::spawn_blocking(move || session.state())
+        .await
+        .ok()
+        .and_then(Result::ok)
+        == Some(SessionState::Connected);
     Json(SessionV1 {
         schema_version: SCHEMA_VERSION,
         connected,
@@ -135,23 +140,40 @@ pub async fn read(
     })?;
     validate_read_request(&request)?;
 
-    let mut guard = session.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    let master = guard.as_mut().ok_or_else(|| {
-        error(
-            StatusCode::CONFLICT,
-            "XCP_SESSION_DISCONNECTED",
-            "XCP simulator is not connected",
-            false,
-        )
-    })?;
-    let bytes = master.read(request.address, request.count).map_err(|cause| {
-        error(
-            StatusCode::BAD_GATEWAY,
-            "XCP_READ_FAILED",
-            cause.to_string(),
+    let bytes = tokio::task::spawn_blocking(move || session.read(request.address, request.count))
+        .await
+        .map_err(|_| error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "XCP_WORKER_JOIN_FAILED",
+            "XCP session worker could not complete the read",
             true,
-        )
-    })?;
+        ))?
+        .map_err(|cause| match cause {
+            SessionError::Disconnected => error(
+                StatusCode::CONFLICT,
+                "XCP_SESSION_DISCONNECTED",
+                "XCP simulator is not connected",
+                false,
+            ),
+            SessionError::Faulted => error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "XCP_SESSION_FAULTED",
+                "XCP simulator session faulted; reconnect explicitly",
+                false,
+            ),
+            SessionError::WorkerStopped => error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "XCP_WORKER_STOPPED",
+                "XCP session worker is unavailable",
+                true,
+            ),
+            SessionError::Xcp(cause) => error(
+                StatusCode::BAD_GATEWAY,
+                "XCP_READ_FAILED",
+                cause.to_string(),
+                true,
+            ),
+        })?;
     let hex = bytes
         .iter()
         .map(|byte| format!("{byte:02X}"))
@@ -201,7 +223,8 @@ mod tests {
 
     #[tokio::test]
     async fn versioned_read_reports_disconnected_session() {
-        let session: Session = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let actor = crate::simulated_session_actor().expect("simulator initialization");
+        let session = actor.handle();
         let failed = read(
             State(session),
             Ok(Json(ReadRequestV1 { address: 4096, count: 4 })),
