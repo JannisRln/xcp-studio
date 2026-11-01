@@ -223,7 +223,7 @@ mod tests {
 
     #[tokio::test]
     async fn versioned_read_reports_disconnected_session() {
-        let actor = super::super::simulated_session_actor().expect("simulator initialization");
+        let actor = crate::simulated_session_actor().expect("simulator initialization");
         let session = actor.handle();
         let failed = read(
             State(session),
