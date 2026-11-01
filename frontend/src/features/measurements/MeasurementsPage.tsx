@@ -32,6 +32,7 @@ function formatAge(ageMs: number | null): string {
 export function MeasurementsPage({
   connected, connecting = false, onConnect, signals, onRemove, selectedIds, onToggle,
 }: Props) {
+  const browserDemo = import.meta.env.MODE === "pages";
   const [filter, setFilter] = useState("");
   const [intervalMs, setIntervalMs] = useState(100);
   const acquisition = useAcquisition(connected);
@@ -68,12 +69,13 @@ export function MeasurementsPage({
       <div className="live-hero-heading">
         <div>
           <div className="live-hero-kicker"><span className="live-beacon" aria-hidden="true" />
-            LIVE VIEW <span className="live-hero-mode">SIMULATED ECU · XCP polling</span></div>
+            LIVE VIEW <span className="live-hero-mode">{browserDemo
+              ? "BROWSER SIMULATION · SYNTHETIC SIGNALS" : "SIMULATED ECU · XCP polling"}</span></div>
           <h2>{indicatorText[acquisition.indicator]}</h2>
           <p>{!connected
             ? "Connect the ECU simulator to view measurements as they arrive."
             : backendRunning
-              ? `Backend acquisition ${acquisition.status?.acquisition_id ?? ""} · ${acquisition.status?.interval_ms ?? intervalMs} ms requested interval`
+              ? `${browserDemo ? "Local demo stream" : "Backend acquisition"} ${acquisition.status?.acquisition_id ?? ""} · ${acquisition.status?.interval_ms ?? intervalMs} ms requested interval`
               : "Choose your signals and start a live measurement. No recording is required."}
           </p>
         </div>
@@ -100,7 +102,7 @@ export function MeasurementsPage({
         <div><span>STREAM</span><strong className={live ? "live-metric-good" : ""}>
           {acquisition.indicator.toUpperCase()}</strong><small>{connected ? "XCP simulator connected" : "ECU disconnected"}</small></div>
         <div><span>RECEIVED RATE</span><strong>{acquisition.receiveHz.toFixed(1)} <em>Hz</em></strong>
-          <small>Measured in this browser</small></div>
+          <small>{browserDemo ? "Local simulated delivery rate" : "Measured in this browser"}</small></div>
         <div><span>LAST SAMPLE</span><strong>{formatAge(acquisition.sampleAge)}</strong>
           <small>{acquisition.indicator === "stale" ? "Stream is stalled" : "Age since browser receipt"}</small></div>
         <div><span>MISSING EVENTS</span><strong>{acquisition.dropped.toLocaleString()}</strong>
@@ -138,7 +140,9 @@ export function MeasurementsPage({
     <section className="panel" aria-label="Latest ECU values">
       <div className="panel-heading">
         <div><h2>Live signal values</h2>
-          <p>Values decoded from XCP memory · no synthetic frontend data</p></div>
+          <p>{browserDemo
+            ? "Generated demo values · not measurements from a physical ECU"
+            : "Values decoded from XCP memory · no synthetic frontend data"}</p></div>
         <span className="muted">{latest
           ? `Last XCP batch · ${new Date(latest.timestamp_ms).toLocaleTimeString()}`
           : "Waiting for measurements"}</span>
@@ -189,7 +193,8 @@ export function MeasurementsPage({
     <details className="panel live-secondary">
       <summary>Optional: export recent live samples</summary>
       <p className="muted">Export contains only the {acquisition.frames.length} recent frames retained
-        by this browser (maximum 2,000). It is not a full backend recording.</p>
+        by this browser (maximum 2,000). It is not a full backend recording.
+        {browserDemo ? " These CSV values are synthetic browser demo data." : ""}</p>
       <div className="toolbar-actions">
         <button className="button" type="button" disabled={!acquisition.frames.length}
           onClick={() => downloadText("xcp-live-preview.csv",
