@@ -18,7 +18,7 @@
 | T-0011 | [Simulator E2E release acceptance](T-0011-simulator-e2e-release.md) | P0 | blocked | T-0005, T-0006, T-0007 | [#3](https://github.com/JannisRln/xcp-studio/issues/3) |
 | T-0012 | [Versioned API contracts](T-0012-versioned-api-contracts.md) | P0 | review | — | [#8](https://github.com/JannisRln/xcp-studio/issues/8) |
 | T-0013 | [Security and hardware-write safety](T-0013-security-safety-policy.md) | P0 | review | — | [#10](https://github.com/JannisRln/xcp-studio/issues/10) |
-| T-0014 | [Runtime pointer resolution](T-0014-runtime-pointer-resolution.md) | P0 | blocked | T-0003, T-0004 | [#6](https://github.com/JannisRln/xcp-studio/issues/6) |
+| T-0014 | [Runtime pointer resolution](T-0014-runtime-pointer-resolution.md) | P0 | blocked (isolated core phase claimed) | T-0003, T-0004 | [#6](https://github.com/JannisRln/xcp-studio/issues/6) |
 
 ## P1 / integration and persistence
 
@@ -45,6 +45,8 @@
 | 3 | Measurement visualization and backend recorder | T-0006, T-0015 | Consume frozen acquisition schema |
 | 3 | Calibration and diagnostics | T-0007, T-0016 | Coordinate audit/event schema and shared session |
 | 4 | End-to-end release acceptance | T-0011 | Integrate only green, merged feature PRs |
+
+**T-0014 coordination:** `chatgpt-t0014-core` owns the standalone resolver phase in `feature/T-0014-bounded-pointer-core`. Overall integration is still blocked; no session, metadata, DTO, or frontend ownership is transferred. See its ticket for pending decisions.
 
 **Merge discipline:** one branch/owner per ticket; cross-module schema change via T-0012; dependencies must be confirmed DONE unless a narrowly scoped independent phase is documented in the ticket. A BLOCKED item is not automatically assignable. Green CI is necessary but not sufficient for acceptance.
 
