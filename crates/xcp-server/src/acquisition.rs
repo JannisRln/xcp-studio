@@ -7,7 +7,6 @@
 use crate::api::v1::{error, ApiFailure};
 use crate::{
     session_snapshot, Session, SnapshotRequest, SnapshotSample, SnapshotSignalRequest,
-    SnapshotValueType,
 };
 use axum::{
     extract::{
@@ -26,13 +25,14 @@ use std::{
         atomic::{AtomicU64, AtomicU8, AtomicUsize, Ordering},
         Arc, Mutex,
     },
-    time::{SystemTime, UNIX_EPOCH},
 };
 use tokio::{
     sync::{broadcast, watch},
     time::{interval, Duration, Instant, MissedTickBehavior},
 };
 use xcp_core::session::SessionState;
+#[cfg(test)]
+use crate::SnapshotValueType;
 
 const RUNNING: u8 = 1;
 const STOPPED: u8 = 2;
@@ -326,10 +326,6 @@ async fn acquire(run: Arc<AcquisitionRun>, session: Session, mut stop_rx: watch:
     });
 }
 
-fn unix_ms() -> u128 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |duration| duration.as_millis())
-}
-
 pub async fn create(
     State(session): State<Session>,
     Extension(service): Extension<Arc<AcquisitionService>>,
@@ -382,7 +378,7 @@ async fn send_events(
     subscription: Subscription,
     mut receiver: broadcast::Receiver<AcquisitionEvent>,
 ) {
-    let run = &subscription.run;
+    let run = Arc::clone(&subscription.run);
     let mut stop_rx = run.stop_tx.subscribe();
     let _guard = subscription;
     loop {
@@ -506,7 +502,7 @@ mod tests {
                 schema_version: 1,
                 acquisition_id: run.id.clone(),
                 sequence,
-                timestamp_ms: unix_ms(),
+                timestamp_ms: 0,
                 monotonic_elapsed_ms: 0,
                 dropped_since_previous: 0,
                 samples: vec![],
