@@ -1,5 +1,3 @@
-# T-0008 — A2L parsing, physical conversion and metadata reconciliation
-
 ---
 id: T-0008
 title: A2L parsing, physical conversion and metadata reconciliation
@@ -12,6 +10,8 @@ github_issue: 11
 depends_on: [T-0003]
 requirements: [A2L-001, A2L-002, A2L-003, A2L-004, A2L-005, ECU-007]
 ---
+
+# T-0008 — A2L parsing, physical conversion and metadata reconciliation
 
 ## Context / desired behavior
 
