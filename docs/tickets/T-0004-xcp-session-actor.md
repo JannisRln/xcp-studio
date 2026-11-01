@@ -1,5 +1,3 @@
-# T-0004 — Serialized XCP session and robust typed read/write
-
 ---
 id: T-0004
 title: Serialized XCP session and robust typed read/write
@@ -12,6 +10,8 @@ github_issue: 7
 depends_on: []
 requirements: [XCP-001, XCP-002, XCP-003, XCP-004, XCP-005, XCP-006, XCP-007, XCP-009]
 ---
+
+# T-0004 — Serialized XCP session and robust typed read/write
 
 ## Context / desired behavior
 
