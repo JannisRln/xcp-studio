@@ -1,11 +1,11 @@
 ---
 id: T-0004
 title: Serialized XCP session and robust typed read/write
-status: in-progress
+status: ready
 priority: P0
 area: xcp-core
-owner: assistant-xcp-agent
-branch: feat/T-0004-server-session-integration
+owner: unassigned
+branch: none
 github_issue: 7
 depends_on: []
 requirements: [XCP-001, XCP-002, XCP-003, XCP-004, XCP-005, XCP-006, XCP-007, XCP-009]
@@ -15,7 +15,7 @@ requirements: [XCP-001, XCP-002, XCP-003, XCP-004, XCP-005, XCP-006, XCP-007, XC
 
 ## Context / desired behavior
 
-Existing XCP master supports a scoped CTO subset and the server still owns a Mutex-protected simulator session. This PR introduces a reusable Rust session actor with serialized MTA-sensitive commands, lifecycle and concurrency/fault tests. This follow-up PR migrates the active legacy and versioned backend routes to that actor and runs blocking commands off Tokio I/O threads.
+Existing XCP master supports a scoped CTO subset and the server previously used a Mutex-protected simulator session. This PR introduces a reusable Rust session actor with serialized MTA-sensitive commands, lifecycle and concurrency/fault tests. Merged PR #24 migrated active legacy and versioned backend routes to that actor and runs blocking commands off Tokio I/O threads.
 
 **Desired outcome:** Serialized XCP session and robust typed read/write. Implement according to [product specification](../product-specification.md), [architecture](../architecture.md) and [API contract](../api-contract.md), where applicable.
 
@@ -59,7 +59,7 @@ Existing XCP master supports a scoped CTO subset and the server still owns a Mut
 
 ## Evidence and completion
 
-- Implementation PRs: [#23](https://github.com/JannisRln/xcp-studio/pull/23) (core actor, merged), next PR implements server integration.
-- CI workflow/head SHA: pending.
-- Test/fixture evidence: pending.
-- Known limitations: no cooperative in-flight cancellation/deadlines, target capability negotiation, DAQ, or backend recording yet. Per-client WebSocket sampling persists, though each ECU command is serialized by the actor.
+- Implementation PRs: [#23](https://github.com/JannisRln/xcp-studio/pull/23) (core actor, merged), [#24](https://github.com/JannisRln/xcp-studio/pull/24) (Axum route integration, merged).
+- CI: PR #24 run [#102](https://github.com/JannisRln/xcp-studio/actions/runs/41289810763), Rust/frontend/docs successful before squash merge.
+- Test evidence: xcp-core session concurrency/error tests; server actor-backed connect/read/snapshot/disconnect and parallel HTTP read tests. Windows cargo fmt/Clippy/tests succeeded.
+- Known limitations: session actor integration complete, but no cooperative in-flight cancellation/deadlines, target capability negotiation, DAQ, or backend recording yet. Per-client WebSocket sampling persists, though each ECU command is serialized by the actor.
