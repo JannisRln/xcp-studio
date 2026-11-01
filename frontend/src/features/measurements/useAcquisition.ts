@@ -376,7 +376,7 @@ export function useAcquisition(connected: boolean) {
       window.clearTimeout(batchTimer.current);
       batchTimer.current = null;
     }
-    queuedFrames.current = [];
+    queuedFrames.current.clear();
     setFrames([]);
     receivedRef.current = 0;
     setReceived(0);
