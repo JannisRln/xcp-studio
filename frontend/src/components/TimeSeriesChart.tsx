@@ -118,7 +118,10 @@ function ChartLane({ unit, signals, frames, viewport, markers, onMeasure, onZoom
       interactionRef.current.onZoom(time, event.deltaY < 0 ? 0.8 : 1.25);
     };
     const onPointerDown = (event: PointerEvent) => {
-      if (!event.shiftKey || event.button !== 0) return;
+      if (!event.shiftKey || event.button !== 0) {
+        suppressClick = false;
+        return;
+      }
       drag = { pointerId: event.pointerId, lastX: event.clientX, moved: false };
       instance.over.setPointerCapture(event.pointerId);
       event.preventDefault();
