@@ -246,6 +246,10 @@ fn collect_if_data(scope: &str, data: &[a2lfile::IfData], output: &mut Vec<A2lIf
 /// configuration: every IF_DATA entry has its own validity flag.
 pub fn parse_a2l(text: &str) -> Result<Vec<A2lModule>, A2lError> {
     if text.is_empty() || text.len() > MAX_A2L_BYTES { return Err(A2lError::InputLimit); }
+    // Conservative denial (including comments/strings) prevents file-system includes.
+    if text.to_ascii_lowercase().contains("/include") {
+        return Err(A2lError::Parse("external /include directives are forbidden".into()));
+    }
     let (file, _warnings) = a2lfile::load_from_string(text, None, false)
         .map_err(|e| A2lError::Parse(e.to_string()))?;
     let mut count = 0usize;
@@ -309,7 +313,9 @@ pub fn parse_a2l(text: &str) -> Result<Vec<A2lModule>, A2lError> {
                 return Err(A2lError::InvalidLimits(name));
             }
             collect_if_data(&name, &c.if_data, &mut result.if_data);
-            let raw_type = result.layouts.get(&c.deposit).and_then(|layout| layout.fnc_type);
+            let raw_type = if c.characteristic_type == a2lfile::CharacteristicType::Value {
+                result.layouts.get(&c.deposit).and_then(|layout| layout.fnc_type)
+            } else { None };
             result.objects.push(A2lObject {
                 name,
                 characteristic: true,
