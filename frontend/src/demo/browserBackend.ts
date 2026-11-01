@@ -107,7 +107,7 @@ class DemoSocket extends EventTarget {
     if (this.readyState === 3) return;
     this.readyState = 3;
     this.owner.unsubscribe(this.id, this);
-    const event = new CloseEvent("close", { code, reason, wasClean: true });
+    const event = demoCloseEvent(code, reason);
     this.onclose?.call(this as unknown as WebSocket, event);
     this.dispatchEvent(event);
   }
