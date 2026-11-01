@@ -15,7 +15,7 @@ requirements: [MEAS-010]
 
 ## Context / desired behavior
 
-Current CSV export uses bounded browser-side buffers and can lose earlier samples on long acquisitions.
+**Deferred behind Live View at the user's request (2026-11-01).** Real-time measurement charts, fresh signal values and robust reconnect are the first priority. Current CSV export uses bounded browser-side buffers and can lose earlier samples on long acquisitions. This is not a reason to delay live monitoring.
 
 **Desired outcome:** Backend-owned durable recording and export. Implement according to [product specification](../product-specification.md), [architecture](../architecture.md) and [API contract](../api-contract.md), where applicable.
 

@@ -1,5 +1,7 @@
 # Delivery Roadmap and Multi-Agent Dependencies
 
+**Current user-facing priority:** Live View first. A connected ECU must show immediately understandable, fresh, reliably reconnecting live charts and values. CSV export is optional; durable recording (T-0015) must not block live monitoring, chart development or simulator acceptance of the Live View itself.
+
 This roadmap sequences work against the [complete product specification](product-specification.md). Tickets are the authoritative work units; the order here is not permission to bypass dependency or safety reviews.
 
 ## Milestone M0 — Documented, reproducible development
@@ -14,14 +16,14 @@ This roadmap sequences work against the [complete product specification](product
 
 **Exit:** ready-to-implement API fixtures; clean Windows build; clear independent agent ownership and no unreviewed incompatible data types.
 
-## Milestone M1 — Reliable simulator measurement
+## Milestone M1 — Reliable simulator Live View (highest user-visible priority)
 
 - T-0005 backend-owned acquisition service, bounded queues, lifecycle and polling fallback.
 - T-0014 runtime pointer resolution after metadata/session interfaces stabilize.
-- T-0006 charts, signal table, quality/gaps and CSV using backend sample data.
-- T-0015 backend recording design and implementation may be developed after shared acquisition schema freezes (P1 functionality, but required for durable release workflow).
+- T-0006 **primary Live View**: default landing page, connect/start actions, clear LIVE/WAITING/STALE status, measured browser update rate, reattachment with backoff and stalled-stream watchdog, per-unit charts, live signal values and subscriber gap visibility. Optional recent-buffer CSV remains secondary.
+- T-0015 backend recording is **deferred behind usable, stable Live View**. It is P1 optional work, not required to start or observe measurements; full-session capture requires its own acceptance tests.
 
-**Exit:** one acquisition for multiple subscribers; live samples from known simulated ECU values; no tab-driven duplicated acquisition; bounded memory and traceable CSV.
+**Live-View exit:** one acquisition for multiple subscribers; live samples from known simulated ECU values; no tab-driven duplicated acquisition; visible data freshness/receive rate, recovery from dropped connections and bounded chart memory. CSV is optional and not a completion gate for watching live values.
 
 ## Milestone M2 — Verified simulated calibration and release acceptance
 

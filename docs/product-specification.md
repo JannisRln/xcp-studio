@@ -10,7 +10,7 @@
 
 ## 1. Vision, audience, and scope
 
-XCP Studio is a desktop-oriented tool for inspecting ECU metadata, establishing XCP connections, acquiring time-aligned measurements, viewing/recording data, and safely calibrating parameters. The initial delivery must work without physical ECU hardware using a deterministic XCP simulator. Hardware support is an additional, independently validated milestone.
+XCP Studio is a desktop-oriented tool for inspecting ECU metadata, establishing XCP connections, acquiring time-aligned measurements, primarily viewing live data, optionally recording/exporting data, and safely calibrating parameters. The initial delivery must work without physical ECU hardware using a deterministic XCP simulator. Hardware support is an additional, independently validated milestone.
 
 Primary users:
 - **Calibration engineer:** discover ECU variables, read/edit calibrated parameters, validate writes and keep an audit trail.
@@ -23,7 +23,7 @@ Primary workflows:
 2. Connect XCP session; verify slave identity/capabilities; inspect session state and failures.
 3. Import an ELF; optionally import matching A2L; map typed ECU variables with address provenance.
 4. Select or manually define signals; validate type, address, access rights and sample schedule.
-5. Start acquisition; view numeric values, timestamps, quality and live plots; stop and export.
+5. **Primary workflow: Live View.** Connect, select signals and start acquisition; immediately inspect fresh numeric values, update rate, timestamps and live plots. Explicit stop ends acquisition; export and recording are secondary, optional actions.
 6. Select a calibratable parameter, read it, preview a constrained change, confirm, write and verify by readback.
 7. Save workspace state, reopen it, review metadata and diagnostic events.
 
@@ -31,8 +31,8 @@ Primary workflows:
 
 | Track | Required outcome | Exclusions |
 | --- | --- | --- |
-| MVP v0.1 (P0) | End-to-end **simulator** connect → typed variable → XCP samples → chart/table → recording/export → guarded write/readback, fully tested | Production ECU safety certification; broad A2L support; guaranteed 1 kHz |
-| v0.2 (P1) | A2L import/conversions, persistent projects, enhanced diagnostics, PCAN/Vector connectivity with bench evidence | Unverified hardware writes |
+| MVP v0.1 (P0) | End-to-end **simulator Live View**: connect → selected typed signal → XCP samples → current values/quality → chart → reconnect/stop, fully tested; guarded write/readback remains a separate P0 safety milestone | Mandatory full-session recording, production ECU safety certification, broad A2L and guaranteed 1 kHz |
+| v0.2 (P1) | Optional durable backend recording/export, A2L conversions, persistent projects, enhanced diagnostics and PCAN/Vector connectivity with bench evidence | Unverified hardware writes |
 | Later (P2) | DAQ optimization and broad target coverage, XCP on Ethernet, richer calibration maps and high-volume recordings | Do not imply delivery before acceptance tests |
 
 Windows is the release-gating OS; Linux/macOS and Docker are not v0.1 requirements. Browser UI served locally is an implementation detail, not permission to expose ECU control on a public interface. Multi-user remote control is out of scope.
@@ -90,7 +90,7 @@ Windows is the release-gating OS; Linux/macOS and Docker are not v0.1 requiremen
 
 **Acceptance:** parse fixtures, search/filter, inspect nested variables, add to acquisition with correct type; invalid location is non-actionable.
 
-### 3.5 Acquisition and live visualization
+### 3.5 Acquisition and live visualization (primary UI priority)
 
 **Target**
 - Acquisition configuration specifies signal IDs, address and type resolution, sampling policy (DAQ preferred when supported; rate-limited UPLOAD polling fallback), expected cadence and data policy.

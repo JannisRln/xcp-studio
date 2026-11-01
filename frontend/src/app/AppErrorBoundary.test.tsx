@@ -10,6 +10,10 @@ describe("dashboard page recovery", () => {
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain('aria-expanded="false"');
     expect(markup).toContain("API Checking");
+    expect(markup).toContain("Live signal trends");
+    expect(markup).toContain("Connect simulator");
+    expect(markup).toContain("LIVE VIEW");
+    expect(markup).toContain("Live signal values");
   });
 
   it("shows a recoverable accessible error without claiming ECU disconnect", () => {

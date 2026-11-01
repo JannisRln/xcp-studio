@@ -24,6 +24,12 @@ Windows-first ECU measurement and calibration workstation under active developme
 
 **For coding agents:** begin with [AGENTS.md](AGENTS.md). Claim a READY ticket under docs/tickets/, use its owned paths, link the PR to requirements and evidence, and do not mark DONE before green CI and merge. GitHub Issues #3–#13 remain linked discussion trackers; Markdown tickets are the reviewed implementation contract. Cross-cutting decisions are in [ADRs](docs/adr/README.md).
 
+## Primary workflow: Live View
+
+The application opens the **Live View** first. Connect the XCP simulator, choose signals, then start a backend-owned acquisition to watch live values and charts. It shows browser-observed receive rate, sample freshness, connection state and detected gaps, and reattaches to the same backend acquisition after transient WebSocket failures. **Stopping the backend acquisition is explicit; leaving the page does not stop it.** CSV export is optional and is only a bounded recent browser preview. Recording is deferred behind reliability and usability of live monitoring.
+
+The simulator initializes fixed values, so a flat chart is expected even while live events are arriving. The LIVE indicator reflects recently received XCP samples, **not changing signal values** or guaranteed ECU DAQ rate.
+
 ## What already works (prototype)
 
 - XCP master and deterministic simulated ECU with CONNECT, DISCONNECT, SET_MTA, UPLOAD and DOWNLOAD.

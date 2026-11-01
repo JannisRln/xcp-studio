@@ -177,3 +177,59 @@ select { width: auto; }
 .chart-cursor-values > span:not(.muted) { display: inline-flex; align-items: center; gap: 6px; }
 .chart-cursor-values i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
 .chart-cursor-values .muted { margin: 0; }
+
+/* Live View is the primary workspace; recording/export is secondary. */
+.live-workspace { gap: 17px; }
+.live-hero { padding: 25px 27px; background: linear-gradient(125deg, #172e42, #132338 50%, #111c2e); border-color: #38617e; }
+.live-hero--live { border-color: #2a8769; background: linear-gradient(125deg, #16372f, #122d39 57%, #111c2e); }
+.live-hero--stale, .live-hero--error { border-color: #916345; }
+.live-hero-heading { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; }
+.live-hero-heading h2 { margin: 8px 0 6px; font-size: clamp(21px,2.4vw,30px); letter-spacing: -.5px; }
+.live-hero-heading p { color: #a9c0d8; font-size: 12px; margin: 0; line-height: 1.6; }
+.live-hero-kicker { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-weight: 800; color: #91d8ff; letter-spacing: 1.3px; font-size: 10px; }
+.live-hero-mode { font-weight: 500; color: #92a8c0; font-size: 10px; letter-spacing: .4px; }
+.live-beacon { width: 10px; height: 10px; border-radius: 50%; background: #7d90a9; display: inline-block; flex: 0 0 auto; }
+.live-hero--live .live-beacon { background: #5af4b1; box-shadow: 0 0 0 5px #4bedac26, 0 0 18px #54f5b37a; animation: live-breathe 2s ease-in-out infinite; }
+.live-hero--connecting .live-beacon, .live-hero--waiting .live-beacon { background: #e5bb70; }
+.live-hero--stale .live-beacon, .live-hero--error .live-beacon { background: #f59b7b; }
+@keyframes live-breathe { 50% { box-shadow: 0 0 0 8px #4bedac12, 0 0 22px #54f5b375; } }
+.live-hero-actions { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.live-primary-action { padding: 13px 23px; font-weight: 750; font-size: 13px; }
+.live-metrics { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); border: 1px solid #35506b; background: #101d2d91; border-radius: 10px; margin-top: 23px; overflow: hidden; }
+.live-metrics > div { display: grid; align-content: center; gap: 6px; padding: 16px 18px; min-width: 0; border-right: 1px solid #35506b; }
+.live-metrics > div:last-child { border-right: 0; }
+.live-metrics span { color: #92a9c2; font-weight: 750; letter-spacing: 1px; font-size: 10px; }
+.live-metrics strong { font-variant-numeric: tabular-nums; font-size: clamp(16px,2vw,23px); overflow-wrap: anywhere; }
+.live-metrics strong.live-metric-good { color: #7af0b7; }
+.live-metrics strong em { font-style: normal; color: #8ba4bf; font-size: 13px; font-weight: 500; }
+.live-metrics small { color: #8ba4bf; font-size: 11px; }
+.live-toolbar { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-top: 19px; }
+.live-toolbar label { display: inline-flex; gap: 9px; align-items: center; color: #b6cde5; font-size: 12px; }
+.live-toolbar label select { width: auto; }
+.live-toolbar > .muted { margin: 0; }
+.live-value-quality { margin-left: auto; color: #75e3b0; letter-spacing: .5px; font-size: 10px; font-weight: 750; }
+.live-value-stale { border-color: #5c5160; }
+.live-value-stale .live-value-quality { color: #e7b47c; }
+.live-value-stale strong { color: #9eaec4; }
+.live-signal-list { display: grid; grid-template-columns: repeat(auto-fill,minmax(220px,1fr)); gap: 0 18px; max-height: 300px; overflow-y: auto; }
+.live-signal-list .signal-select-row { min-width: 0; }
+.live-secondary { padding-top: 15px; padding-bottom: 15px; }
+.live-secondary summary { cursor: pointer; font-weight: 650; color: #a7bad2; }
+.live-secondary .toolbar-actions { margin-top: 13px; }
+@media(max-width:1050px) {
+  .live-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .live-metrics > div:nth-child(2) { border-right: 0; }
+  .live-metrics > div:nth-child(-n+2) { border-bottom: 1px solid #35506b; }
+}
+@media(max-width:550px) {
+  .live-hero { padding: 19px 15px; }
+  .live-hero-actions { width: 100%; }
+  .live-primary-action { flex: 1; }
+  .live-metrics > div { padding: 14px 10px; }
+  .live-metrics small { font-size: 10px; }
+  .live-toolbar { align-items: start; }
+  .live-signal-list { grid-template-columns: 1fr; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .live-hero--live .live-beacon { animation: none; }
+}
