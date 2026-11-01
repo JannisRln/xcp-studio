@@ -1,9 +1,18 @@
-import { useMemo, useState, type PointerEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import uPlot from "uplot";
 import type { MeasurementFrame, SignalDefinition } from "../core/api";
-import {
-  chartAxis, chartViewport, decimateExtrema, groupSignalsByUnit,
-  nearestChartFrame, type ChartPoint,
-} from "./chartMath";
+
+/** Retained testable selector for a single signal series. */
+export function chartPoints(frames: MeasurementFrame[], signal: SignalDefinition) {
+  return frames.flatMap(frame => {
+    const sample = frame.samples.find(item => item.name === signal.name && item.address === signal.address);
+    return sample && Number.isFinite(sample.value)
+      ? [{ t: frame.timestamp_ms, y: sample.value }] : [];
+  });
+}
+import { chartViewport, groupSignalsByUnit, nearestChartFrame } from "./chartMath";
+import { cursorFrequencyHz, frameTimeDomain, panViewport, zoomViewport } from "./measurementTools";
+import { alignedPlotData, cursorValue } from "./plotData";
 
 type Props = {
   frames: MeasurementFrame[];
@@ -12,75 +21,228 @@ type Props = {
   title?: string;
 };
 
-const WIDTH = 930;
-const LEFT = 70;
-const RIGHT = 900;
-const LANE_HEIGHT = 177;
+type Viewport = { start: number; end: number };
+type Measurements = { a: number | null; b: number | null };
+type LaneProps = {
+  unit: string;
+  signals: SignalDefinition[];
+  frames: MeasurementFrame[];
+  viewport: Viewport;
+  markers: Measurements;
+  onMeasure: (time: number) => void;
+  onZoom: (time: number, factor: number) => void;
+  onPan: (deltaMs: number) => void;
+};
 
-export function chartPoints(frames: MeasurementFrame[], signal: SignalDefinition): ChartPoint[] {
-  return frames.flatMap(frame => {
-    const sample = frame.samples.find(value => value.name === signal.name && value.address === signal.address);
-    return sample && Number.isFinite(sample.value) ? [{ t: frame.timestamp_ms, y: sample.value }] : [];
-  });
+function ChartLane({ unit, signals, frames, viewport, markers, onMeasure, onZoom, onPan }: LaneProps) {
+  const host = useRef<HTMLDivElement>(null);
+  const plot = useRef<uPlot | null>(null);
+  const interactionRef = useRef({ onMeasure, onZoom, onPan, viewport });
+  const markersRef = useRef(markers);
+  const seriesKey = signals.map(signal => signal.id + "/" + signal.color).join(",");
+  const aligned = useMemo(() =>
+    alignedPlotData(frames, signals, 1400) as uPlot.AlignedData,
+    [frames, signals],
+  );
+  interactionRef.current = { onMeasure, onZoom, onPan, viewport };
+  markersRef.current = markers;
+
+  useEffect(() => {
+    const element = host.current;
+    if (!element) return;
+    const opts: uPlot.Options = {
+      width: Math.max(320, element.clientWidth || 720),
+      height: 242,
+      padding: [12, 12, 4, 4],
+      series: [
+        {},
+        ...signals.map(signal => ({
+          label: signal.name,
+          stroke: signal.color,
+          width: 2,
+          spanGaps: false,
+        })),
+      ],
+      scales: { x: { time: false }, y: { auto: true } },
+      axes: [
+        {
+          stroke: "#9bafc9",
+          grid: { stroke: "#26394e" },
+          values: (_u, ticks) => ticks.map(tick =>
+            Number.isFinite(tick) ? new Date(tick).toLocaleTimeString() : ""),
+        },
+        {
+          stroke: "#9bafc9",
+          grid: { stroke: "#26394e" },
+          label: unit === "raw" ? "Raw value" : unit,
+          size: 72,
+        },
+      ],
+      cursor: { drag: { x: false, y: false } },
+      hooks: {
+        draw: [(u) => {
+          const ctx = u.ctx;
+          const values = markersRef.current;
+          for (const [name, time] of [["A", values.a], ["B", values.b]] as const) {
+            if (time === null || time < u.scales.x.min! || time > u.scales.x.max!) continue;
+            const x = u.valToPos(time, "x", true);
+            ctx.save();
+            ctx.strokeStyle = name === "A" ? "#70ecbd" : "#f7c67e";
+            ctx.lineWidth = devicePixelRatio || 1;
+            ctx.setLineDash([5, 4]);
+            ctx.beginPath();
+            ctx.moveTo(x, u.bbox.top);
+            ctx.lineTo(x, u.bbox.top + u.bbox.height);
+            ctx.stroke();
+            ctx.restore();
+          }
+        }],
+      },
+    };
+    const instance = new uPlot(opts, aligned, element);
+    plot.current = instance;
+    // Pointer time is resolved against full-resolution samples by the parent.
+    // Snapping to uPlot's decimated cursor index would lose short spikes.
+    let drag: { pointerId: number; lastX: number; moved: boolean } | null = null;
+    let suppressClick = false;
+    const onClick = (event: MouseEvent) => {
+      if (suppressClick) { suppressClick = false; return; }
+      if (!instance.data[0].length) return;
+      const time = instance.posToVal(event.offsetX, "x");
+      if (Number.isFinite(time)) interactionRef.current.onMeasure(time);
+    };
+    const onWheel = (event: WheelEvent) => {
+      if (!instance.data[0].length) return;
+      event.preventDefault();
+      const time = instance.posToVal(event.offsetX, "x");
+      interactionRef.current.onZoom(time, event.deltaY < 0 ? 0.8 : 1.25);
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (!event.shiftKey || event.button !== 0) {
+        suppressClick = false;
+        return;
+      }
+      drag = { pointerId: event.pointerId, lastX: event.clientX, moved: false };
+      instance.over.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      const deltaPx = event.clientX - drag.lastX;
+      if (Math.abs(deltaPx) < 1) return;
+      drag.lastX = event.clientX;
+      drag.moved = true;
+      const { viewport: current, onPan: pan } = interactionRef.current;
+      pan(deltaPx / Math.max(1, instance.over.clientWidth) * (current.end - current.start));
+    };
+    const onPointerEnd = (event: PointerEvent) => {
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      suppressClick = drag.moved;
+      drag = null;
+      if (instance.over.hasPointerCapture(event.pointerId))
+        instance.over.releasePointerCapture(event.pointerId);
+    };
+    instance.over.addEventListener("click", onClick);
+    instance.over.addEventListener("wheel", onWheel, { passive: false });
+    instance.over.addEventListener("pointerdown", onPointerDown);
+    instance.over.addEventListener("pointermove", onPointerMove);
+    instance.over.addEventListener("pointerup", onPointerEnd);
+    instance.over.addEventListener("pointercancel", onPointerEnd);
+    const resize = new ResizeObserver(entries => {
+      const width = entries[0]?.contentRect.width ?? element.clientWidth;
+      if (width >= 200) instance.setSize({ width: Math.floor(width), height: 242 });
+    });
+    resize.observe(element);
+    return () => {
+      resize.disconnect();
+      instance.over.removeEventListener("click", onClick);
+      instance.over.removeEventListener("wheel", onWheel);
+      instance.over.removeEventListener("pointerdown", onPointerDown);
+      instance.over.removeEventListener("pointermove", onPointerMove);
+      instance.over.removeEventListener("pointerup", onPointerEnd);
+      instance.over.removeEventListener("pointercancel", onPointerEnd);
+      instance.destroy();
+      plot.current = null;
+    };
+    // Chart object depends on series identity, NOT every incoming sample.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seriesKey, unit]);
+
+  useEffect(() => {
+    if (!plot.current) return;
+    plot.current.setData(aligned);
+    plot.current.setScale("x", { min: viewport.start, max: viewport.end });
+  }, [aligned, viewport.start, viewport.end]);
+
+  useEffect(() => { plot.current?.redraw(); }, [markers.a, markers.b]);
+
+  return <div className="uplot-lane">
+    <div className="uplot-lane-header">
+      <strong>{unit === "raw" ? "Raw value" : unit}</strong>
+      <span>{signals.map(signal => signal.name).join(" · ")}</span>
+    </div>
+    <div ref={host} className="uplot-host timeseries"
+      role="img" aria-label={"Canvas live chart " + unit + " for " +
+        signals.map(signal => signal.name).join(", ")} />
+  </div>;
 }
 
-export function TimeSeriesChart({
-  frames, signals, height = 320, title = "Time series",
-}: Props) {
+export function TimeSeriesChart({ frames, signals, title = "Time series" }: Props) {
   const [hidden, setHidden] = useState<string[]>([]);
-  const [rangeMs, setRangeMs] = useState(0);
+  const [rangeMs, setRangeMs] = useState(15000);
   const [panMs, setPanMs] = useState(0);
-  const [cursor, setCursor] = useState<MeasurementFrame | null>(null);
+  const [target, setTarget] = useState<"a" | "b">("a");
+  const [markers, setMarkers] = useState<Measurements>({ a: null, b: null });
+  const [signalId, setSignalId] = useState("");
 
-  const viewport = useMemo(
-    () => chartViewport(frames, rangeMs, panMs), [frames, rangeMs, panMs],
-  );
-  const visibleFrames = useMemo(
-    () => frames.filter(frame => frame.timestamp_ms >= viewport.start && frame.timestamp_ms <= viewport.end),
-    [frames, viewport.start, viewport.end],
-  );
-  const lanes = useMemo(() => groupSignalsByUnit(signals.filter(signal =>
-    !hidden.includes(signal.id))).map(group => {
-    const series = group.signals.map(signal => ({
-      signal,
-      points: chartPoints(visibleFrames, signal),
-    }));
-    const values = series.flatMap(item => item.points);
-    return {
-      unit: group.unit,
-      series,
-      axis: chartAxis(values),
-    };
-  }), [signals, hidden, visibleFrames]);
+  const viewport = useMemo(() => chartViewport(frames, rangeMs, panMs), [frames, rangeMs, panMs]);
+  const domain = useMemo(() => frameTimeDomain(frames), [frames]);
+  const zoom = useCallback((time: number, factor: number) => {
+    if (!domain) return;
+    const next = zoomViewport(domain, viewport, factor, time);
+    setRangeMs(next.rangeMs);
+    setPanMs(next.panMs);
+  }, [domain, viewport]);
+  const pan = useCallback((deltaMs: number) => {
+    if (!domain) return;
+    const next = panViewport(domain, viewport, deltaMs);
+    setRangeMs(next.rangeMs);
+    setPanMs(next.panMs);
+  }, [domain, viewport]);
+  const visible = useMemo(() =>
+    frames.filter(frame => frame.timestamp_ms >= viewport.start &&
+      frame.timestamp_ms <= viewport.end), [frames, viewport.start, viewport.end]);
+  const visibleSignals = useMemo(() => signals.filter(signal =>
+    !hidden.includes(signal.id)), [signals, hidden]);
+  const lanes = useMemo(() => groupSignalsByUnit(visibleSignals), [visibleSignals]);
+  const measured = signals.find(signal => signal.id === signalId) ?? signals[0];
+  const a = measured ? cursorValue(frames, measured, markers.a) : null;
+  const b = measured ? cursorValue(frames, measured, markers.b) : null;
+  const frequency = cursorFrequencyHz(a?.time ?? null, b?.time ?? null);
 
-  const canvasHeight = Math.max(height, lanes.length * LANE_HEIGHT + 55);
-  const timeSpan = Math.max(1, viewport.end - viewport.start);
-  const x = (timestamp: number) => LEFT + ((timestamp - viewport.start) / timeSpan) * (RIGHT - LEFT);
-  const frameCount = visibleFrames.length;
+  const measure = useCallback((time: number) => {
+    const nearest = nearestChartFrame(frames, time);
+    if (!nearest) return;
+    setMarkers(previous => ({ ...previous, [target]: nearest.timestamp_ms }));
+    setTarget(previous => previous === "a" ? "b" : "a");
+  }, [frames, target]);
 
-  const cursorMove = (event: PointerEvent<SVGSVGElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    if (rect.width < 1 || !frameCount) return;
-    const coordinate = (event.clientX - rect.left) / rect.width * WIDTH;
-    const ratio = Math.max(0, Math.min(1, (coordinate - LEFT) / (RIGHT - LEFT)));
-    const timestamp = viewport.start + ratio * timeSpan;
-    setCursor(nearestChartFrame(visibleFrames, timestamp));
-  };
-
+  const oldest = frames.length ? frames[0].timestamp_ms : 0;
   const panStep = Math.max(1000, rangeMs / 2);
-  const oldest = frames.length ? Math.min(...frames.map(frame => frame.timestamp_ms)) : 0;
 
   return <section className="panel plot-panel" aria-label={title}>
-    <div className="panel-heading"><div><h2>{title}</h2>
-      <p>Backend XCP polling · per-unit Y axes · host timestamps</p></div>
-      <span className="muted">{frameCount} / {frames.length} frames</span>
+    <div className="panel-heading">
+      <div><h2>{title}</h2>
+        <p>uPlot Canvas · independent unit axes · browser-capped render updates</p></div>
+      <span className="muted">{visible.length} / {frames.length} frames</span>
     </div>
     <div className="toolbar chart-controls">
       <label className="field-group" htmlFor="chart-time-range">Time range
         <select id="chart-time-range" value={rangeMs} onChange={event => {
-          setRangeMs(Number(event.target.value));
-          setPanMs(0);
+          setRangeMs(Number(event.target.value)); setPanMs(0);
         }}>
+          {![0, 5000, 15000, 60000, 300000].includes(rangeMs) &&
+            <option value={rangeMs}>Custom · {(rangeMs / 1000).toFixed(2)} s</option>}
           <option value={0}>All buffered</option>
           <option value={5000}>Last 5 seconds</option>
           <option value={15000}>Last 15 seconds</option>
@@ -95,76 +257,57 @@ export function TimeSeriesChart({
       <button className="button small" type="button" disabled={!panMs}
         onClick={() => setPanMs(0)}>Live edge</button>
     </div>
-
     <div className="plot-legend">{signals.map(signal =>
       <button key={signal.id} type="button"
         className={hidden.includes(signal.id) ? "legend-item disabled" : "legend-item"}
         onClick={() => setHidden(previous => previous.includes(signal.id)
           ? previous.filter(id => id !== signal.id) : [...previous, signal.id])}
         aria-pressed={!hidden.includes(signal.id)}>
-        <i style={{ background: signal.color }} />{signal.name}{signal.unit ? ` (${signal.unit})` : ""}
+        <i style={{ background: signal.color }} />{signal.name}
+        {signal.unit ? " (" + signal.unit + ")" : ""}
       </button>)}</div>
 
-    <div className="chart-scroll" style={{ maxHeight: 640, overflowY: "auto" }}>
-      <svg className="timeseries" viewBox={`0 0 ${WIDTH} ${canvasHeight}`}
-        style={{ width: "100%", height: canvasHeight, minHeight: canvasHeight }}
-        role="img" aria-label={`${title}; ${lanes.length} unit axes; ${frameCount} visible sample frames`}
-        onPointerMove={cursorMove} onPointerLeave={() => setCursor(null)}>
-        {lanes.map((lane, index) => {
-          const top = 22 + index * LANE_HEIGHT;
-          const yTop = top + 25;
-          const yBottom = top + 140;
-          const y = (value: number) => yBottom -
-            ((value - lane.axis.low) / (lane.axis.high - lane.axis.low)) * (yBottom - yTop);
-          const ticks = Array.from({ length: 5 }, (_, i) =>
-            lane.axis.low + (lane.axis.high - lane.axis.low) * i / 4);
-          return <g key={lane.unit}>
-            <text x={LEFT} y={top + 12} fill="#b9cde6" fontSize="13">
-              {lane.unit === "raw" ? "Raw value" : `Unit: ${lane.unit}`}
-            </text>
-            {ticks.map((value, tick) => <g key={tick}>
-              <line x1={LEFT} x2={RIGHT} y1={y(value)} y2={y(value)}
-                stroke="#2c3d54" strokeDasharray="4 5" />
-              <text x={LEFT - 10} y={y(value) + 4} textAnchor="end" fill="#8799b0" fontSize="11">
-                {Number(value.toPrecision(4))}
-              </text>
-            </g>)}
-            {lane.series.map(({ signal, points }) => <polyline key={signal.id}
-              points={decimateExtrema(points, 600).map(point =>
-                `${x(point.t)},${y(point.y)}`).join(" ")}
-              fill="none" stroke={signal.color} strokeWidth="2.2" strokeLinejoin="round"
-              strokeLinecap="round" vectorEffect="non-scaling-stroke" />)}
-          </g>;
-        })}
-
-        {Array.from({ length: 5 }, (_, i) => {
-          const timestamp = viewport.start + (timeSpan * i / 4);
-          return <text key={i} x={LEFT + i * (RIGHT - LEFT) / 4}
-            y={canvasHeight - 12} textAnchor="middle" fill="#8799b0" fontSize="11">
-            {frameCount ? new Date(timestamp).toLocaleTimeString() : "—"}
-          </text>;
-        })}
-        {cursor && <line x1={x(cursor.timestamp_ms)} x2={x(cursor.timestamp_ms)}
-          y1="18" y2={canvasHeight - 32} stroke="#c6daef"
-          strokeDasharray="3 3" strokeWidth="1.2" />}
-        {!frameCount && <text x={WIDTH / 2} y={canvasHeight / 2} textAnchor="middle"
-          fill="#8799b0" fontSize="17">No samples in the selected time range</text>}
-      </svg>
+    <div className="measurement-cursors">
+      <strong>Measurement cursors</strong>
+      <label>Signal <select aria-label="Measurement signal" value={measured?.id ?? ""}
+        onChange={event => setSignalId(event.target.value)}>
+        {signals.map(signal => <option key={signal.id} value={signal.id}>
+          {signal.name}</option>)}
+      </select></label>
+      <button className={target === "a" ? "button small primary" : "button small"}
+        type="button" onClick={() => setTarget("a")}>Set cursor A</button>
+      <button className={target === "b" ? "button small primary" : "button small"}
+        type="button" onClick={() => setTarget("b")}>Set cursor B</button>
+      <button className="button small" type="button" onClick={() => setMarkers({ a: null, b: null })}>
+        Clear cursors</button>
+      <span className="muted">Click to place A/B · wheel to zoom · Shift+drag to pan.</span>
     </div>
 
-    <div className="chart-cursor-values" role="status" aria-live="off">
-      {cursor ? <>
-        <strong>{new Date(cursor.timestamp_ms).toLocaleString()}</strong>
-        {signals.filter(signal => !hidden.includes(signal.id)).map(signal => {
-          const value = cursor.samples.find(sample => sample.name === signal.name &&
-            sample.address === signal.address)?.value;
-          return <span key={signal.id}><i style={{ background: signal.color }} />
-            {signal.name}: {value === undefined ? "—" : Number(value.toPrecision(7))} {signal.unit}</span>;
-        })}
-      </> : <span className="muted">Move the pointer across the chart to inspect recorded values.</span>}
+    <div className="uplot-lanes">
+      {lanes.map(group => <ChartLane key={group.unit}
+        unit={group.unit} signals={group.signals} frames={visible}
+        viewport={viewport} markers={markers} onMeasure={measure}
+        onZoom={zoom} onPan={pan} />)}
+      {!lanes.length && <div className="empty-state">Select a signal to show its live trend.</div>}
     </div>
-    <p className="muted chart-note">Time windows and panning affect the chart only. Every physical unit
-      has its own Y axis; downsampling preserves local minimum/maximum spikes. The backend
-      acquisition continues independently of this view.</p>
+    <div className="measurement-readout" role="status">
+      <span>A: {a ? new Date(a.time).toLocaleTimeString() : "—"}
+        {a?.value !== null && a?.value !== undefined ? " / " + a.value.toFixed(3) : ""}
+      </span>
+      <span>B: {b ? new Date(b.time).toLocaleTimeString() : "—"}
+        {b?.value !== null && b?.value !== undefined ? " / " + b.value.toFixed(3) : ""}
+      </span>
+      <strong>Δt: {a && b ? ((b.time - a.time) / 1000).toFixed(3) + " s" : "—"}</strong>
+      <strong>1/|Δt|: {frequency === null ? "—" : frequency.toFixed(3) + " Hz"}</strong>
+      <strong>ΔY: {a?.value !== null && a?.value !== undefined &&
+        b?.value !== null && b?.value !== undefined
+          ? (b.value - a.value).toFixed(3) + " " + (measured?.unit ?? "")
+          : "—"}</strong>
+    </div>
+    <p className="muted chart-note">Rendering is decoupled from XCP acquisition. Chart data is
+      bounded and reduced to extrema-preserving points per unit; no physical ECU performance
+      is implied by the browser demo.</p>
   </section>;
 }
+
+export const MemoTimeSeriesChart = memo(TimeSeriesChart);
