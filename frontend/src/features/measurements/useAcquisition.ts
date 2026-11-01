@@ -278,7 +278,7 @@ export function useAcquisition(connected: boolean) {
       }
     }, 500);
     return () => window.clearInterval(timer);
-  }, [connected, state, status, detach]);
+  }, [connected, state, status?.state, status?.interval_ms, detach]);
 
   const start = useCallback(async (signals: SignalDefinition[], intervalMs: number) => {
     if (!connected || !mounted.current) {
