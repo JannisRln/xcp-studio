@@ -64,7 +64,9 @@ struct DesktopApp {
 
 impl DesktopApp {
     fn new(cc: &eframe::CreationContext<'_>, acquisition_id: Option<String>, auto_bench: bool, screenshot_path: Option<PathBuf>) -> Self {
-        cc.egui_ctx.set_visuals(egui::Visuals::dark());
+        // A light shell matches egui_dock's default panes and keeps the title
+        // and toolbar readable on Windows in the default theme.
+        cc.egui_ctx.set_visuals(egui::Visuals::light());
 
         // Both independent plot lanes are visible at startup. Every pane can be
         // dragged, resized, tabbed, or detached by egui_dock.
@@ -600,7 +602,12 @@ fn main() -> eframe::Result {
     }
     eframe::run_native(
         "XCP Studio / Native Measurement Lab",
-        eframe::NativeOptions::default(),
+        eframe::NativeOptions {
+            viewport: egui::ViewportBuilder::default()
+                .with_inner_size([940.0, 660.0])
+                .with_min_inner_size([760.0, 520.0]),
+            ..Default::default()
+        },
         Box::new(move |cc| Ok(Box::new(DesktopApp::new(cc, acquisition_id, auto_bench, screenshot_path)))),
     )
 }
