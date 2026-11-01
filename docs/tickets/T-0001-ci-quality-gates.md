@@ -1,5 +1,3 @@
-# T-0001 — Reproducible CI, lockfiles and mandatory quality gates
-
 ---
 id: T-0001
 title: Reproducible CI, lockfiles and mandatory quality gates
@@ -12,6 +10,8 @@ github_issue: 4
 depends_on: []
 requirements: [QA-001, QA-002, QA-005, QA-006]
 ---
+
+# T-0001 — Reproducible CI, lockfiles and mandatory quality gates
 
 ## Context / desired behavior
 
