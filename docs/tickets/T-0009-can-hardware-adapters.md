@@ -1,5 +1,3 @@
-# T-0009 — Windows PCAN and Vector transport integration
-
 ---
 id: T-0009
 title: Windows PCAN and Vector transport integration
@@ -12,6 +10,8 @@ github_issue: 12
 depends_on: [T-0004, T-0013]
 requirements: [CAN-001, CAN-002, CAN-003, CAN-004, CAN-005, QA-004]
 ---
+
+# T-0009 — Windows PCAN and Vector transport integration
 
 ## Context / desired behavior
 
