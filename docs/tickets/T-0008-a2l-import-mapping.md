@@ -61,7 +61,7 @@ No A2L parser or typed metadata reconciliation has been delivered.
 
 ## Evidence and completion
 
-- Implementation PR / commit: feature/T-0008-a2l-core (PR pending at claim time).
+- Implementation PR / commit: [draft PR #48](https://github.com/JannisRln/xcp-studio/pull/48), branch feature/T-0008-a2l-core.
 - CI workflow/head SHA: pending.
 - Test/fixture evidence: crates/xcp-core/tests/a2l_core.rs and tests/fixtures/t0008-golden.a2l; execution evidence via PR CI.
 - Known limitations and follow-ups: read-only core; only scalar numeric conversions and metadata diagnostics. UI, vendor-specific typed XCP IF_DATA, maps/tables, runtime address validation and contract integration deferred; see [core decision](../a2l-core-phase.md).
