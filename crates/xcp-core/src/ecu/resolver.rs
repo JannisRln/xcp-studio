@@ -248,7 +248,10 @@ pub fn resolve<R: MemoryReader>(
     if !matches!(mapping.pointer_bytes, 4 | 8)
         || target.elf_address_bytes != mapping.pointer_bytes
         || target.endian != mapping.target_endian
-        || mapping.link_region.end().is_none()
+    {
+        return Err(ResolveError::LayoutMismatch);
+    }
+    if mapping.link_region.end().is_none()
         || mapping.runtime_region.end().is_none()
         || mapping.link_region.length != mapping.runtime_region.length
         || approved_regions.iter().any(|region| region.end().is_none())
