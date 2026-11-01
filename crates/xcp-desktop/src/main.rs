@@ -549,14 +549,20 @@ impl eframe::App for DesktopApp {
                 for pixel in &image.pixels {
                     rgba.extend_from_slice(&pixel.to_array());
                 }
-                if let Err(error) = image::save_buffer(
-                    &path,
+                // A completed filename must never refer to a partially written PNG.
+                let partial = path.with_extension("png.partial");
+                let result = image::save_buffer_with_format(
+                    &partial,
                     &rgba,
                     image.size[0] as u32,
                     image.size[1] as u32,
                     image::ColorType::Rgba8,
-                ) {
+                    image::ImageFormat::Png,
+                )
+                .and_then(|()| std::fs::rename(&partial, &path).map_err(image::ImageError::IoError));
+                if let Err(error) = result {
                     eprintln!("Native renderer screenshot failed: {error}");
+                    let _ = std::fs::remove_file(&partial);
                 }
             });
         }

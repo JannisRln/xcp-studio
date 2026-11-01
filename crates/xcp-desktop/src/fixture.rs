@@ -133,7 +133,9 @@ pub fn chart_segments(
         raw.push(current);
     }
     // Prioritize newest segments when a faulty stream contains thousands of gaps.
-    let visible = raw.len().min(max_points / 2);
+    // Avoid hundreds of separate egui_plot items in a severely interrupted stream.
+    // Always keep the newest visible segments; the status panel counts all gaps.
+    let visible = raw.len().min(max_points / 2).min(128);
     let budget = (max_points / visible.max(1)).max(2);
     let start = raw.len().saturating_sub(visible);
     raw.into_iter()
@@ -196,6 +198,17 @@ mod tests {
         assert_eq!(segments[1].last().unwrap()[0], 14.0);
         assert_eq!(segments[2].first().unwrap()[0], 16.0);
         assert_eq!(segments[3].first().unwrap()[0], 23.0);
+    }
+
+    #[test]
+    fn gap_storm_limits_plot_items_and_preserves_newest_time() {
+        let mut rows = synthetic_frames(20_000);
+        for (i, row) in rows.iter_mut().enumerate() {
+            row.gap_before = i % 2 == 0;
+        }
+        let lines = chart_segments(&rows, 0, PLOT_LIMIT);
+        assert!(lines.len() <= 128);
+        assert_eq!(lines.last().unwrap().last().unwrap()[0], 19_999.0);
     }
 
     #[test]
