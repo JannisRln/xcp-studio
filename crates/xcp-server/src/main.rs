@@ -55,9 +55,18 @@ async fn health() -> Json<Health> {
 }
 
 async fn inspect_elf(
+    Extension(parse_permit): Extension<Arc<security::ElfParsePermit>>,
     body: axum::body::Bytes,
 ) -> Result<Json<ElfResult>, (StatusCode, Json<ApiError>)> {
-    let symbols = xcp_core::elf::inspect_bytes(&body).map_err(|_| {
+    // Parsing malformed DWARF/ELF can be CPU intensive. Keep its semaphore
+    // permit alive even if the HTTP deadline cancels the waiting handler.
+    let symbols = tokio::task::spawn_blocking(move || {
+        let _permit = parse_permit;
+        xcp_core::elf::inspect_bytes(&body)
+    })
+    .await
+    .map_err(|_| internal_error())?
+    .map_err(|_| {
         (
             StatusCode::BAD_REQUEST,
             Json(ApiError {
