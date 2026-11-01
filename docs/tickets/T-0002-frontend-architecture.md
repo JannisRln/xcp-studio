@@ -1,11 +1,11 @@
 ---
 id: T-0002
 title: Complete modular accessible dashboard architecture
-status: in-progress
+status: ready
 priority: P0
 area: frontend
-owner: assistant-frontend-agent
-branch: feat/T-0002-dashboard-resilience
+owner: unassigned
+branch: none
 github_issue: 5
 depends_on: []
 requirements: [UI-001, UI-002, UI-003, UI-004, ECU-011, ECU-012]
@@ -15,7 +15,7 @@ requirements: [UI-001, UI-002, UI-003, UI-004, ECU-011, ECU-012]
 
 ## Context / desired behavior
 
-PR #18 was merged and introduced a modular dashboard, symbol browser, typed API and charts. Remaining gaps include page-level runtime-error recovery, reliable signal selection across page navigation, and independent validation of large symbol searches.
+PR #18 was merged and introduced a modular dashboard, symbol browser, typed API and charts. PR #21 added page-level runtime-error recovery, persistent signal selection and 10k-symbol paging tests. Remaining work includes browser keyboard E2E, larger real ELF fixtures and component/dependency tradeoff reviews.
 
 **Desired outcome:** Complete modular accessible dashboard architecture. Implement according to [product specification](../product-specification.md), [architecture](../architecture.md) and [API contract](../api-contract.md), where applicable.
 
@@ -59,7 +59,7 @@ PR #18 was merged and introduced a modular dashboard, symbol browser, typed API 
 
 ## Evidence and completion
 
-- Implementation PR / commit: pending.
-- CI workflow/head SHA: pending.
-- Test/fixture evidence: pending.
-- Known limitations and follow-ups: pending.
+- Implementation PRs: [#18](https://github.com/JannisRln/xcp-studio/pull/18) modular dashboard and [#21](https://github.com/JannisRln/xcp-studio/pull/21) error handling, keyboard focus, persistent selection and safe symbol drafts; both merged.
+- CI: PR #21 [run #94](https://github.com/JannisRln/xcp-studio/actions/runs/41286456084) passed Rust/frontend/docs before merge.
+- Tests: Vitest for typed address handling, 10k-symbol paging, React static render of navigation/error fallback and immutable signal selection. No browser keyboard E2E yet.
+- Known limitations: imported ELF symbols remain link-time addresses until type/runtime resolution (T-0003/T-0014); full browser E2E/accessibility review and project persistence pending.
