@@ -22,7 +22,7 @@ References: [product specification](product-specification.md), [API contract](ap
 | crates/xcp-core/src/xcp.rs | XCP master and in-memory simulated slave | Scoped CTO commands, no ECU DAQ |
 | crates/xcp-core/src/elf.rs | ELF symbol inspection, DWARF compilation-unit summary | No complete typed variable/location graph |
 | crates/xcp-core/src/pcan.rs | PCAN-Basic classic CAN adapter for Windows | No production hardware session factory or UI wiring |
-| crates/xcp-server/src/main.rs | Axum HTTP API and per-client WebSocket polling stream | Monolithic server composition, actor-backed serialized XCP, no shared acquisition service |
+| crates/xcp-server/src/main.rs | Axum HTTP API and per-client WebSocket polling stream | Actor-backed serialized XCP; shared bounded polling acquisition proposed in T-0005 (no ECU DAQ/recorder) |
 | frontend/src/main.tsx | Application entrypoint in baseline main | Modular dashboard proposed in PR #18; see status snapshot |
 | frontend/src/features/measurements/ | Demo/live XCP measurement components in baseline | Per-tab buffer and polling; no backend recorder |
 | .github/workflows/ci.yml | Windows Rust and frontend jobs | Rustfmt applied in temporary runner; Clippy/npm ci still outstanding |
@@ -135,7 +135,7 @@ CONNECTED --transport failure--> ERROR/RECOVERING (policy-controlled)
 - If the ECU disconnects, backend sends a terminal acquisition state and stops the recorder safely; no implicit reconnection during calibration.
 - Report active session ID/profile and capability set, not only a boolean.
 
-**Current implementation difference:** the server uses an SessionActor / SessionHandle. The per-WebSocket timer queues each read through that actor. Sampling is still one timer per WebSocket client, not a shared backend acquisition: migrating session ownership does not complete T-0005.
+**Current implementation difference:** the server uses an SessionActor / SessionHandle. The legacy per-WebSocket timer queues each read through the actor. The new versioned acquisition service in T-0005 instead owns one polling timer per backend acquisition with bounded multi-subscriber fanout. The legacy route remains for compatibility; the new service is still not ECU DAQ, complete quality metadata or durable recording.
 
 ## 7. Acquisition lifecycle and backpressure
 
