@@ -5,6 +5,8 @@ import { formatAddress, palette } from "../../core/signals";
 import { MemoTimeSeriesChart } from "../../components/TimeSeriesChart";
 import { LiveWindows } from "../../components/LiveWindows";
 import { useAcquisition } from "./useAcquisition";
+import { sampleQuality, type QualitySample } from "./quality";
+import "./liveQuality.css";
 
 type Props = {
   connected: boolean;
@@ -62,7 +64,6 @@ export function MeasurementsPage({
     })
     : active;
 
-  const live = acquisition.indicator === "live";
   const showExisting = backendRunning && acquisition.state !== "streaming";
 
   return <div className="workspace-stack live-workspace">
@@ -152,15 +153,18 @@ export function MeasurementsPage({
       <div className="value-grid">{signalSet.map(signal => {
         const sample = latest?.samples.find(item => item.name === signal.name &&
           item.address === signal.address);
-        const stale = !live || !sample;
+        const quality = sampleQuality(connected, acquisition.state,
+          acquisition.indicator, sample as QualitySample | undefined);
+        const stale = quality !== "VALID READ" && quality !== "UNVERIFIED";
         return <div className={stale ? "value-tile live-value-stale" : "value-tile live-value-fresh"}
           key={signal.id}>
           <span><i style={{ background: signal.color }} />{signal.name}
-            <small className="live-value-quality">{!connected ? "DISCONNECTED"
-              : !sample ? "NO DATA" : !live ? "STALE" : "LIVE"}</small></span>
+            <small className="live-value-quality">{quality}</small></span>
           <strong>{sample ? Number(sample.value.toPrecision(7)).toLocaleString() : "—"}
             <small> {signal.unit}</small></strong>
-          <small>{formatAddress(signal.address)} · {signal.value_type}</small>
+          <small>{formatAddress(signal.address)} · {signal.value_type}
+            {" · "}{(sample as QualitySample | undefined)?.address_origin === "manual"
+              ? "Manual raw address" : "Address origin unspecified"}</small>
         </div>;
       })}
         {!signalSet.length && <div className="empty-state">
