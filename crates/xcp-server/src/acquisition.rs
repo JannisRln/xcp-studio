@@ -31,7 +31,6 @@ use tokio::{
     time::{interval, Duration, Instant, MissedTickBehavior},
 };
 use xcp_core::session::SessionState;
-#[cfg(test)]
 use crate::SnapshotValueType;
 
 const RUNNING: u8 = 1;
@@ -369,7 +368,7 @@ async fn acquire(run: Arc<AcquisitionRun>, session: Session, mut stop_rx: watch:
                                 value_type: Some(signal.value_type.clone()),
                                 quality: Some(SampleQuality::Valid),
                                 address_origin: Some(AddressOrigin::Manual),
-                            }).collect(),
+                            }).inspect(|sample| debug_assert!(sample.validate().is_ok())).collect(),
                         };
                         // Broadcast send never waits for a slow client. Lagged receivers
                         // observe a gap and account the dropped frames independently.
