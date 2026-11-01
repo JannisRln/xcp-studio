@@ -1,13 +1,15 @@
+mod acquisition;
 mod api;
 
 use axum::{
-    extract::{ws::{Message, WebSocket, WebSocketUpgrade}, DefaultBodyLimit, State},
+    extract::{ws::{Message, WebSocket, WebSocketUpgrade}, DefaultBodyLimit, Extension, State},
     http::StatusCode,
     routing::{get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use xcp_core::session::{SessionActor, SessionError, SessionHandle, SessionState};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::{interval, Duration, MissedTickBehavior};
 use xcp_core::xcp::{CanIds, SimulatedSlave, SimulatedTransport, XcpMaster};
@@ -127,7 +129,9 @@ async fn session_connect(
 
 async fn session_disconnect(
     State(session): State<Session>,
+    Extension(acquisition): Extension<Arc<acquisition::AcquisitionService>>,
 ) -> Result<Json<SessionStatus>, (StatusCode, Json<ApiError>)> {
+    acquisition.stop_active();
     execute_xcp(move || session.disconnect()).await?;
     Ok(Json(SessionStatus {
         connected: false,
@@ -170,14 +174,14 @@ struct SnapshotRequest {
     signals: Vec<SnapshotSignalRequest>,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct SnapshotSignalRequest {
     name: String,
     address: u32,
     value_type: SnapshotValueType,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 enum SnapshotValueType {
     U8,
@@ -214,7 +218,7 @@ impl SnapshotValueType {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 struct SnapshotSample {
     name: String,
     address: u32,
@@ -348,6 +352,7 @@ fn simulated_session_actor() -> Result<SessionActor, xcp_core::xcp::XcpError> {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let actor = simulated_session_actor()?;
     let session = actor.handle();
+    let acquisition = Arc::new(acquisition::AcquisitionService::default());
     let app = Router::new()
         .route("/api/health", get(health))
         .route("/api/v1/health", get(api::v1::health))
@@ -360,7 +365,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/xcp/read", post(session_read))
         .route("/api/xcp/snapshot", post(session_snapshot))
         .route("/api/xcp/stream", get(stream_upgrade))
+        .route("/api/v1/acquisitions", post(acquisition::create))
+        .route("/api/v1/acquisitions/current", get(acquisition::current))
+        .route("/api/v1/acquisitions/{id}", get(acquisition::status))
+        .route("/api/v1/acquisitions/{id}/stop", post(acquisition::stop))
+        .route("/api/v1/acquisitions/{id}/stream", get(acquisition::subscribe))
         .layer(DefaultBodyLimit::max(32 * 1024 * 1024))
+        .layer(Extension(acquisition))
         .with_state(session);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:8080").await?;
     println!("XCP Studio API: http://127.0.0.1:8080/api/health");
@@ -429,7 +440,10 @@ mod snapshot_tests {
         assert_eq!(snapshot.samples[0].value, 1850.0);
         assert_eq!(snapshot.samples[1].value, 88.5);
 
-        assert!(!session_disconnect(State(session.clone())).await.unwrap().0.connected);
+        assert!(!session_disconnect(
+            State(session.clone()),
+            Extension(Arc::new(acquisition::AcquisitionService::default())),
+        ).await.unwrap().0.connected);
         let failure = session_read(
             State(session),
             Json(ReadRequest {

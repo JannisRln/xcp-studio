@@ -130,6 +130,36 @@ Example v1 error:
 
 Canonical shared fixtures: [contracts/v1](../contracts/v1/README.md). Both Rust server tests and TypeScript client tests validate them. The frontend uses these validated v1 endpoints for health/status/raw reads; connection/disconnection, ELF upload and measurement streaming remain on their unversioned routes. The v1 WS subscriber endpoint and DAQ/recording ownership remain target functionality for T-0005.
 
+## 2.6 Shared backend polling acquisition v1 (T-0005)
+
+This is a separately managed **single acquisition per simulator ECU**, not a new per-subscriber scheduler. T-0005 adds these routes while keeping the legacy `/api/xcp/stream` unchanged for compatibility:
+
+| Method | Route | Request/response |
+| --- | --- | --- |
+| POST | /api/v1/acquisitions | Body `{interval_ms:100,signals:[{name,address,value_type}]}`; returns HTTP 201 with acquisition status |
+| GET | /api/v1/acquisitions/current | Most recent acquisition status including configured signals to allow UI reconnection; 404 before first acquisition |
+| GET | /api/v1/acquisitions/{id} | Status, active signals/type descriptors, monotonic sequence, subscribers, drops, last error |
+| POST | /api/v1/acquisitions/{id}/stop | Idempotently stop that acquisition; status |
+| GET (WebSocket) | /api/v1/acquisitions/{id}/stream | Subscribe to **existing** acquisition; no initial config message |
+
+A single active acquisition is allowed per process; to reconfigure, stop the existing one before creating another. Intervals: 20–10000 ms; 1–64 signals; signal names must be unique and nonempty, at most 128 UTF-8 bytes; address/byte width must fit 32-bit. Supported types remain u8/i8/u16/i16/u32/i32/f32/f64 in little-endian simulator memory. Create requires a connected session. HTTP 409 ACQUISITION_ALREADY_RUNNING or XCP_SESSION_DISCONNECTED, 404 ACQUISITION_NOT_FOUND, 422 INVALID_SAMPLE_INTERVAL/INVALID_SIGNALS/INVALID_SIGNAL_NAME/INVALID_SIGNAL_ADDRESS, 429 SUBSCRIBER_LIMIT. Error bodies use the stable v1 envelope in section 2.5.
+
+The service broadcasts up to 128 events in a bounded Tokio channel, supports up to 16 subscribers, and never blocks acquisition on a slow receiver. Each subscriber that falls behind receives a versioned `gap` event with dropped event count; global status exposes cumulative subscriber lag events. No historical replay is available. Status `state` is running/stopped/failed and `sampling_mode` is explicitly `polling`.
+
+**Sample event** from [shared fixture](../contracts/v1/acquisition-sample.json):
+
+~~~json
+{"type":"samples","schema_version":1,"acquisition_id":"acq-1","sequence":1,"timestamp_ms":1761980000000,"monotonic_elapsed_ms":20,"dropped_since_previous":0,"samples":[{"name":"Engine speed","address":4096,"value":1850},{"name":"Coolant","address":4100,"value":88.5}]}
+~~~
+
+**Gap event:** `{"type":"gap","schema_version":1,"acquisition_id":"acq-1","dropped":11}`.
+
+**Terminal event:** `{"type":"status","schema_version":1,"acquisition_id":"acq-1","state":"stopped","reason":"operator_stop"}`; faulted acquisition emits `state:"failed",reason:"xcp_read_error"`. Subscriber closes after terminal status.
+
+Timestamp semantics: `timestamp_ms` is a **host wall-clock** observation after sequential reads, not an ECU timebase. `monotonic_elapsed_ms` is measured since the backend acquisition task began. Both represent milliseconds, not nanosecond accuracy or synchronized multi-signal ECU timing. `sequence` increases once per emitted backend sample batch, regardless of subscriber count. These numeric fields are within JS-safe range for expected runtime; any future nanosecond or 64-bit exact values must be encoded as strings.
+
+**Limitations:** no ECU-side DAQ/event acquisition, no durable recorder, no quality metadata for individual samples, no replay/resume, no hardware timestamp synchronization. See T-0005/T-0015 and section 4 for the richer *target* contract.
+
 ## 3. TARGET REST API v1 (design proposal; implemented subset identified below)
 
 Except for the three **CURRENT** endpoints in section 2.5, these target endpoints require implementing tickets and contract tests; names are tentative until API-001 is fully accepted.

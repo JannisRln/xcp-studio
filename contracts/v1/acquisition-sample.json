@@ -1,0 +1,13 @@
+{
+  "type": "samples",
+  "schema_version": 1,
+  "acquisition_id": "acq-1",
+  "sequence": 1,
+  "timestamp_ms": 1761980000000,
+  "monotonic_elapsed_ms": 20,
+  "dropped_since_previous": 0,
+  "samples": [
+    {"name": "Engine speed", "address": 4096, "value": 1850.0},
+    {"name": "Coolant", "address": 4100, "value": 88.5}
+  ]
+}
