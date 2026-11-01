@@ -221,7 +221,7 @@ export class DemoBackend {
     const match = path.match(/^\/api\/v1\/acquisitions\/([^/]+)(\/stop)?$/);
     if (match && this.current && decodeURIComponent(match[1]) === this.current.status.acquisition_id) {
       if (match[2] === "/stop" && method === "POST") this.stop();
-      if (method === "GET" && !match[2] || method === "POST" && match[2]) {
+      if ((method === "GET" && !match[2]) || (method === "POST" && match[2])) {
         return json(this.current.status);
       }
     }
@@ -229,7 +229,14 @@ export class DemoBackend {
 
     if (path === "/api/v1/sessions/current/reads" && method === "POST") {
       if (!this.connected) return failure(409, "XCP_SESSION_DISCONNECTED", "Connect demo first");
-      const payload = JSON.parse(String(init.body ?? "{}"));
+      let payload: {address: number; count: number};
+      try { payload = JSON.parse(String(init.body ?? "{}")); }
+      catch { return failure(400, "INVALID_JSON", "Malformed read JSON"); }
+      if (!Number.isSafeInteger(payload.address) || payload.address < 0 ||
+          payload.address > 0xffffffff || !Number.isSafeInteger(payload.count) ||
+          payload.count < 1 || payload.count > 4096 ||
+          payload.address + payload.count - 1 > 0xffffffff)
+        return failure(422, "INVALID_ADDRESS_RANGE", "Invalid read length or address");
       const bytes = new Uint8Array(payload.count);
       if (payload.address === 4096 && payload.count >= 4)
         new DataView(bytes.buffer).setUint32(0, Math.round(simulatedValue(
