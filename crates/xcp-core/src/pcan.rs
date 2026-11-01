@@ -147,6 +147,14 @@ impl CanTransport for PcanTransport {
     }
 
     fn receive(&mut self) -> Result<Option<CanFrame>, TransportError> {
+        self.receive_with_timeout(self.receive_timeout)
+    }
+
+    fn receive_with_timeout(
+        &mut self,
+        timeout: Duration,
+    ) -> Result<Option<CanFrame>, TransportError> {
+        let budget = timeout.min(self.receive_timeout);
         let start = Instant::now();
         loop {
             let mut message = PcanMessage {
@@ -164,10 +172,10 @@ impl CanTransport for PcanTransport {
                     }
                 }
                 PCAN_ERROR_QRCVEMPTY => {
-                    if start.elapsed() >= self.receive_timeout {
+                    if start.elapsed() >= budget {
                         return Ok(None);
                     }
-                    std::thread::sleep(self.poll_interval);
+                    std::thread::sleep(self.poll_interval.min(budget.saturating_sub(start.elapsed())));
                 }
                 _ => return Err(status_error("CAN_Read", status)),
             }

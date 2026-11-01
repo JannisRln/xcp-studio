@@ -46,12 +46,19 @@ pub enum XcpError {
     Protocol(u8),
     #[error("invalid command parameters")]
     InvalidParameters,
+    #[error("unsupported XCP communication mode or maximum CTO")]
+    UnsupportedCapabilities,
+    #[error("XCP command deadline exceeded; the ECU outcome may be unknown")]
+    DeadlineExceeded,
+    #[error("XCP command queue is full")]
+    CommandQueueFull,
 }
 
 pub struct XcpMaster<T: CanTransport> {
     transport: T,
     ids: CanIds,
     response_timeout: Duration,
+    resources: Option<u8>,
 }
 
 impl<T: CanTransport> XcpMaster<T> {
@@ -60,6 +67,7 @@ impl<T: CanTransport> XcpMaster<T> {
             transport,
             ids,
             response_timeout: Duration::from_millis(500),
+            resources: None,
         }
     }
 
@@ -70,62 +78,140 @@ impl<T: CanTransport> XcpMaster<T> {
         self
     }
 
-    fn request(&mut self, command: &[u8]) -> Result<Vec<u8>, XcpError> {
+    /// Use the earlier of the per-CTO response timeout and the actor deadline.
+    /// Hardware transports must honor receive_with_timeout for this to be a
+    /// strict wall-clock bound; a synchronous blocked driver cannot be preempted.
+    fn request_until(
+        &mut self,
+        command: &[u8],
+        command_deadline: Option<Instant>,
+    ) -> Result<Vec<u8>, XcpError> {
         if command.is_empty() || command.len() > 8 {
             return Err(XcpError::InvalidParameters);
         }
+        let now = Instant::now();
+        let response_deadline = now.checked_add(self.response_timeout).unwrap_or(now);
+        let deadline = command_deadline
+            .map(|outer| outer.min(response_deadline))
+            .unwrap_or(response_deadline);
+        if now >= deadline {
+            return Err(XcpError::NoResponse);
+        }
+
         self.transport.send(CanFrame {
             id: self.ids.command,
             data: command.to_vec(),
         })?;
-        // Ignore unrelated CAN traffic until the deadline or receive timeout.
-        // The transport must bound individual receive calls.
-        let started = Instant::now();
+
         loop {
-            let Some(frame) = self.transport.receive()? else {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
                 return Err(XcpError::NoResponse);
+            }
+            let frame = self.transport.receive_with_timeout(remaining)?;
+            // A transport that returned after its deadline must not make a
+            // late response appear to be the current command's success.
+            if Instant::now() >= deadline {
+                return Err(XcpError::NoResponse);
+            }
+            let Some(frame) = frame else {
+                // Non-blocking mocks/adapters may report an empty receive
+                // immediately. Poll without consuming a CPU core.
+                std::thread::sleep(Duration::from_millis(1).min(
+                    deadline.saturating_duration_since(Instant::now()),
+                ));
+                continue;
             };
             if frame.id != self.ids.response {
-                if started.elapsed() >= self.response_timeout {
-                    return Err(XcpError::NoResponse);
-                }
                 continue;
             }
-            // This transport implements classic CAN: responses must fit in one 8-byte CTO.
+            // Classic CAN CTOs carry at most eight bytes; never accept an
+            // empty/malformed response or a negative response without a code.
             if frame.data.len() > 8 {
                 return Err(XcpError::InvalidResponse);
             }
             match frame.data.first().copied() {
                 Some(RES) => return Ok(frame.data[1..].to_vec()),
                 Some(ERR) if frame.data.len() >= 2 => {
-                    return Err(XcpError::Protocol(frame.data[1]))
+                    return Err(XcpError::Protocol(frame.data[1]));
                 }
                 _ => return Err(XcpError::InvalidResponse),
             }
         }
     }
 
+    /// Discard queued/stale CTO replies after a fault and before reconnecting.
+    /// This is best-effort: XCP-on-CAN CTO does not provide a transaction ID.
+    pub(crate) fn discard_pending(&mut self) -> Result<(), XcpError> {
+        const MAX_DRAIN: usize = 64;
+        for _ in 0..MAX_DRAIN {
+            if self.transport.receive_with_timeout(Duration::ZERO)?.is_none() {
+                self.resources = None;
+                return Ok(());
+            }
+        }
+        Err(XcpError::InvalidResponse)
+    }
+
     pub fn connect(&mut self) -> Result<Vec<u8>, XcpError> {
-        self.request(&[CONNECT, 0])
+        self.connect_impl(None)
+    }
+
+    pub(crate) fn connect_until(&mut self, deadline: Instant) -> Result<Vec<u8>, XcpError> {
+        self.connect_impl(Some(deadline))
+    }
+
+    fn connect_impl(&mut self, deadline: Option<Instant>) -> Result<Vec<u8>, XcpError> {
+        self.resources = None;
+        let response = self.request_until(&[CONNECT, 0], deadline)?;
+        // CONNECT positive response includes resource bits, communication
+        // mode, max CTO / max DTO and protocol/transport versions.
+        if response.len() != 7 {
+            return Err(XcpError::InvalidResponse);
+        }
+        // Only 8-byte, byte-addressed, little-endian classic CAN commands
+        // are implemented. Refuse incompatible targets before memory I/O.
+        if response[1] & 0x07 != 0 || response[2] != 8 {
+            return Err(XcpError::UnsupportedCapabilities);
+        }
+        self.resources = Some(response[0]);
+        Ok(response)
     }
 
     pub fn disconnect(&mut self) -> Result<(), XcpError> {
-        self.request(&[DISCONNECT])?;
+        self.disconnect_impl(None)
+    }
+
+    pub(crate) fn disconnect_until(&mut self, deadline: Instant) -> Result<(), XcpError> {
+        self.disconnect_impl(Some(deadline))
+    }
+
+    fn disconnect_impl(&mut self, deadline: Option<Instant>) -> Result<(), XcpError> {
+        self.request_until(&[DISCONNECT], deadline)?;
+        self.resources = None;
         Ok(())
     }
 
     pub fn set_mta(&mut self, address: u32) -> Result<(), XcpError> {
+        self.set_mta_impl(address, None)
+    }
+
+    fn set_mta_impl(&mut self, address: u32, deadline: Option<Instant>) -> Result<(), XcpError> {
         let a = address.to_le_bytes();
-        self.request(&[SET_MTA, 0, 0, 0, a[0], a[1], a[2], a[3]])?;
+        self.request_until(&[SET_MTA, 0, 0, 0, a[0], a[1], a[2], a[3]], deadline)?;
         Ok(())
     }
 
     /// Read at most seven bytes per upload request for byte-granularity XCP.
     pub fn upload(&mut self, count: u8) -> Result<Vec<u8>, XcpError> {
+        self.upload_impl(count, None)
+    }
+
+    fn upload_impl(&mut self, count: u8, deadline: Option<Instant>) -> Result<Vec<u8>, XcpError> {
         if count == 0 || count > 7 {
             return Err(XcpError::InvalidParameters);
         }
-        let response = self.request(&[UPLOAD, count])?;
+        let response = self.request_until(&[UPLOAD, count], deadline)?;
         if response.len() < count as usize {
             return Err(XcpError::InvalidResponse);
         }
@@ -133,32 +219,75 @@ impl<T: CanTransport> XcpMaster<T> {
     }
 
     pub fn read(&mut self, address: u32, count: usize) -> Result<Vec<u8>, XcpError> {
+        self.read_impl(address, count, None)
+    }
+
+    pub(crate) fn read_until(
+        &mut self,
+        address: u32,
+        count: usize,
+        deadline: Instant,
+    ) -> Result<Vec<u8>, XcpError> {
+        self.read_impl(address, count, Some(deadline))
+    }
+
+    fn read_impl(
+        &mut self,
+        address: u32,
+        count: usize,
+        deadline: Option<Instant>,
+    ) -> Result<Vec<u8>, XcpError> {
         validate_access_range(address, count)?;
-        self.set_mta(address)?;
+        self.set_mta_impl(address, deadline)?;
         let mut result = Vec::with_capacity(count);
         while result.len() < count {
             let n = (count - result.len()).min(7) as u8;
-            result.extend(self.upload(n)?);
+            result.extend(self.upload_impl(n, deadline)?);
         }
         Ok(result)
     }
 
     /// Download uses a maximum of six payload bytes in an 8-byte CAN CTO.
     pub fn download(&mut self, data: &[u8]) -> Result<(), XcpError> {
+        self.download_impl(data, None)
+    }
+
+    fn download_impl(&mut self, data: &[u8], deadline: Option<Instant>) -> Result<(), XcpError> {
         if data.is_empty() || data.len() > 6 {
             return Err(XcpError::InvalidParameters);
         }
         let mut command = vec![DOWNLOAD, data.len() as u8];
         command.extend_from_slice(data);
-        self.request(&command)?;
+        self.request_until(&command, deadline)?;
         Ok(())
     }
 
     pub fn write(&mut self, address: u32, data: &[u8]) -> Result<(), XcpError> {
+        self.write_impl(address, data, None)
+    }
+
+    pub(crate) fn write_until(
+        &mut self,
+        address: u32,
+        data: &[u8],
+        deadline: Instant,
+    ) -> Result<(), XcpError> {
+        self.write_impl(address, data, Some(deadline))
+    }
+
+    fn write_impl(
+        &mut self,
+        address: u32,
+        data: &[u8],
+        deadline: Option<Instant>,
+    ) -> Result<(), XcpError> {
         validate_access_range(address, data.len())?;
-        self.set_mta(address)?;
+        if self.resources.is_some_and(|resources| resources & 0x01 == 0) {
+            return Err(XcpError::Protocol(ERR_ACCESS_DENIED));
+        }
+        self.set_mta_impl(address, deadline)?;
         for chunk in data.chunks(6) {
-            self.download(chunk)?;
+            self.download_impl(chunk, deadline)?;
         }
         Ok(())
     }
