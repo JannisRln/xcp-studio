@@ -7,7 +7,7 @@
   "monotonic_elapsed_ms": 20,
   "dropped_since_previous": 0,
   "samples": [
-    {"name": "Engine speed", "address": 4096, "value": 1850},
+    {"name": "Engine speed", "address": 4096, "value": 1850.0},
     {"name": "Coolant", "address": 4100, "value": 88.5}
   ]
 }
