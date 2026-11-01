@@ -65,6 +65,19 @@ jobs:
         env:
           XCP_E2E_SCREENSHOT: ${{ runner.temp }}\\xcp-live-view.png
         run: node scripts/live-view-e2e.mjs
+      - name: Extended real Rust/Vite/uPlot browser acceptance (pause, reconnect, CSV, cursors)
+        run: node frontend/src/features/measurements/live-view.browser-e2e.mjs
+      - name: Measure 20k-frame uPlot browser rendering (synthetic; no throughput claim)
+        env:
+          XCP_BENCH_OUTPUT: ${{ runner.temp }}\\xcp-uplot-20k-benchmark.json
+        run: node frontend/src/features/measurements/live-view.bench.mjs
+      - name: Upload measured 20k-frame browser benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcp-uplot-20k-benchmark-windows
+          path: ${{ runner.temp }}\\xcp-uplot-20k-benchmark.json
+          if-no-files-found: warn
       - name: Upload actual browser screenshot of Live View
         if: always()
         uses: actions/upload-artifact@v4
