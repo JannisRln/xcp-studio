@@ -24,6 +24,14 @@ Windows-first ECU measurement and calibration workstation under active developme
 
 **For coding agents:** begin with [AGENTS.md](AGENTS.md). Claim a READY ticket under docs/tickets/, use its owned paths, link the PR to requirements and evidence, and do not mark DONE before green CI and merge. GitHub Issues #3–#13 remain linked discussion trackers; Markdown tickets are the reviewed implementation contract. Cross-cutting decisions are in [ADRs](docs/adr/README.md).
 
+## Hosted interactive preview
+
+The browser-only Live View preview is prepared for GitHub Pages:
+
+**https://jannisrln.github.io/xcp-studio/** (available after Pages is enabled and the deployment succeeds).
+
+The preview uses generated signals and simulated versioned REST/WebSocket events inside your browser. **It does not connect to a real ECU, XCP server or CAN interface.** See [deployment instructions](docs/live-preview.md) for the GitHub Pages setup and limitations. The real backend remains available only with the local Rust server.
+
 ## Primary workflow: Live View
 
 The application opens the **Live View** first. Connect the XCP simulator, choose signals, then start a backend-owned acquisition to watch live values and charts. It shows browser-observed receive rate, sample freshness, connection state and detected gaps, and reattaches to the same backend acquisition after transient WebSocket failures. **Stopping the backend acquisition is explicit; leaving the page does not stop it.** CSV export is optional and is only a bounded recent browser preview. Recording is deferred behind reliability and usability of live monitoring.
