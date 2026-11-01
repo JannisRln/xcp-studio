@@ -1,5 +1,3 @@
-# T-0006 — Real measurement workspace, charts and CSV accuracy
-
 ---
 id: T-0006
 title: Real measurement workspace, charts and CSV accuracy
@@ -12,6 +10,8 @@ github_issue: 9
 depends_on: [T-0002, T-0005]
 requirements: [MEAS-003, MEAS-008, MEAS-009, UI-005]
 ---
+
+# T-0006 — Real measurement workspace, charts and CSV accuracy
 
 ## Context / desired behavior
 
