@@ -14,15 +14,15 @@
 | Connected | read/write success | Connected | Bytes or Ok |
 | Connected | benign negative ERR (access denied, out of range) or invalid caller address | Connected | Protocol error or invalid parameters |
 | Connected | ERR_SEQUENCE, transport loss, malformed CTO or no response | Faulted | XCP error |
-| Connected | deadline exceeded while in flight | Faulted | SessionError::Timeout (outcome unknown) |
+| Connected | deadline exceeded while in flight | Faulted | SessionError::Xcp(XcpError::DeadlineExceeded) (outcome unknown) |
 | Connected | DISCONNECT acknowledged | Disconnected | Ok |
 | Connected | DISCONNECT failure | Faulted | XCP error; ECU disconnection unconfirmed |
 | Faulted | read/write | Faulted | SessionError::Faulted |
 | Faulted | CONNECT after stale-reply drain and valid response | Connected | CONNECT response; operator initiated |
 | Faulted | CONNECT error or drain failure | Faulted | Explicit error |
 | Faulted | DISCONNECT acknowledged | Disconnected | Ok |
-| Any | queued request deadline exceeded before execution | Unchanged | SessionError::Timeout; no CAN command sent |
-| Any | actor stopped / command queue full | Unchanged | WorkerStopped / QueueFull |
+| Any | queued request deadline exceeded before execution | Unchanged | SessionError::Xcp(XcpError::DeadlineExceeded); no CAN command sent |
+| Any | actor stopped / command queue full | Unchanged | WorkerStopped / Xcp(CommandQueueFull) |
 
 A synchronous caller's deadline includes actor queue wait, the CONNECT/SET_MTA/UPLOAD/DOWNLOAD sequence and reply transmission. The queue is bounded to 128 pending commands. Expired queued operations are never executed. In-flight operations may have affected ECU memory before timing out: there is **no automatic retry, rollback or success claim**. A write must be treated as an unknown outcome until the operator performs a fresh connection and verified readback.
 
