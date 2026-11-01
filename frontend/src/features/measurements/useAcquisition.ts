@@ -5,6 +5,7 @@ import {
   type AcquisitionSamplesEvent, type AcquisitionStatus,
 } from "../../core/acquisitionV1";
 import { VersionedApiError } from "../../core/apiV1";
+import { enqueuePreviewFrame } from "./frameQueue";
 import {
   freshnessLimitMs, liveIndicator, measuredReceiveHz, recentReceiveTimes,
   reconnectDelayMs, sampleAgeMs, skippedSequences,
@@ -200,7 +201,7 @@ export function useAcquisition(connected: boolean) {
           rateTimes.current = recentReceiveTimes(rateTimes.current, now);
           latestFrameRef.current = frame;
           receivedRef.current++;
-          if (!pausedRef.current) queuedFrames.current.push(frame);
+          if (!pausedRef.current) enqueuePreviewFrame(queuedFrames.current, frame, MAX_BUFFER);
           queueUi();
         } else if (event.type === "gap") {
           pendingDrops.current += event.dropped;
