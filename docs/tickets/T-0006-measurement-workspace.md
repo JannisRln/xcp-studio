@@ -4,8 +4,8 @@ title: Real measurement workspace, charts and CSV accuracy
 status: in-progress
 priority: P0
 area: frontend-measurements
-owner: assistant-live-view
-branch: feat/T-0006-live-view-priority
+owner: assistant-live-perf
+branch: feat/github-pages-live-demo
 github_issue: 9
 depends_on: [T-0002, T-0005]
 requirements: [MEAS-003, MEAS-008, MEAS-009, UI-005]
@@ -56,6 +56,16 @@ requirements: [MEAS-003, MEAS-008, MEAS-009, UI-005]
 - Linked GitHub issue: [#9](https://github.com/JannisRln/xcp-studio/issues/9).
 - Changes to shared interfaces require contract-first coordination and an ADR if architecture changes.
 - Agent must claim ownership in this ticket and update INDEX.md before overlapping code edits.
+
+## Performance and browser preview slice (PR #35)
+
+- Replace SVG sample polylines with uPlot Canvas charts; cap React preview commit frequency at 12.5 Hz while backend sampling remains independent.
+- Use bounded aligned data and min/max extrema sampling, with 10,000-sample tests that preserve narrow spikes.
+- Make chart/value windows draggable and resizable with React Grid Layout and per-browser layout persistence.
+- Add dual measurement cursors with delta-time and delta-value readout, multi-unit chart lanes, pan/time windows.
+- Build an explicitly labelled synthetic browser simulator for GitHub Pages; this is **not** native XCP, DAQ, or hardware benchmarking.
+- CI must validate both ordinary Rust-connected build and VITE_DEMO=1 hosted bundle.
+- Remaining work: 100-signal/10k+ perf profiling on Windows hardware, worker-based decoding under stress, complete browser interaction E2E, quality and physical value conversions.
 
 ## Evidence and completion
 
