@@ -1,11 +1,11 @@
 ---
 id: T-0012
 title: Versioned REST and WebSocket contracts with cross-language tests
-status: ready
+status: in-progress
 priority: P0
 area: api
-owner: unassigned
-branch: none
+owner: assistant-api-agent
+branch: feat/T-0012-versioned-api-contracts
 github_issue: 8
 depends_on: []
 requirements: [API-001, API-002, API-003, API-004, DIAG-001]
@@ -15,16 +15,16 @@ requirements: [API-001, API-002, API-003, API-004, DIAG-001]
 
 ## Context / desired behavior
 
-Current endpoints are unversioned and the WebSocket has no acquisition/session ID, quality semantics, stable errors or shared contract fixtures.
+The baseline endpoints are unversioned. This PR adds an additive **v1 HTTP slice** for health, current simulator session and raw memory reads, with typed errors and shared Rust/TypeScript fixtures. Versioned acquisition/stream contracts and separate acquisition ownership remain T-0005 follow-up work.
 
 **Desired outcome:** Versioned REST and WebSocket contracts with cross-language tests. Implement according to [product specification](../product-specification.md), [architecture](../architecture.md) and [API contract](../api-contract.md), where applicable.
 
 ## Scope
 
-- [ ] Agree on versioned REST/WS DTOs and publish success/invalid/error JSON fixtures.
+- [x] Define and test versioned **HTTP** success/error DTOs and shared fixtures; full WS design remains a documented target.
 - [ ] Define timestamp, integer precision, address provenance, quality/gap and error codes.
-- [ ] Implement server-side runtime validation and TS boundary parsing for untrusted responses.
-- [ ] Provide additive migration from unversioned endpoints and contract compatibility tests.
+- [x] Implement server-side runtime validation and TS boundary parsing for the new versioned health/session/read endpoints.
+- [x] Provide additive health/session/read routes with shared fixtures; legacy XCP endpoints retained for existing callers.
 - [ ] Separate control requests from subscribing to a pre-existing acquisition.
 
 ## Non-goals
@@ -59,7 +59,7 @@ Current endpoints are unversioned and the WebSocket has no acquisition/session I
 
 ## Evidence and completion
 
-- Implementation PR / commit: pending.
+- Implementation PR: will be linked after creation; this is a partial API contract slice.
 - CI workflow/head SHA: pending.
 - Test/fixture evidence: pending.
-- Known limitations and follow-ups: pending.
+- Known limitations: v1 does not yet define a shared acquisition subscription or all error categories; per-client legacy WS polling remains. Complete under T-0005 and the remaining scope of T-0012.
