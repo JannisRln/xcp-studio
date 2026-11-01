@@ -1,0 +1,51 @@
+name: Deploy Live View Preview (GitHub Pages)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/deploy-preview.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages-live-preview
+  cancel-in-progress: true
+
+jobs:
+  deploy-preview:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Build Pages-only browser simulator
+        working-directory: frontend
+        run: npm run build -- --mode pages
+      - name: Verify static project path and preview assets
+        run: |
+          test -f frontend/dist/index.html
+          grep -q '/xcp-studio/assets/' frontend/dist/index.html
+      - name: Configure Pages site
+        uses: actions/configure-pages@v5
+      - name: Upload static HTML/JS/CSS (no Rust backend)
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: frontend/dist
+      - name: Publish Live View
+        id: deployment
+        uses: actions/deploy-pages@v4
