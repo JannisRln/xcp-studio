@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import type { SignalDefinition } from "../../core/api";
 import { acquisitionCsv, downloadText } from "../../core/export";
 import { formatAddress, palette } from "../../core/signals";
-import { TimeSeriesChart } from "../../components/TimeSeriesChart";
+import { MemoTimeSeriesChart } from "../../components/TimeSeriesChart";
+import { LiveWindows } from "../../components/LiveWindows";
 import { useAcquisition } from "./useAcquisition";
 
 type Props = {
@@ -45,20 +46,21 @@ export function MeasurementsPage({
   const backendRunning = acquisition.status?.state === "running";
   const busy = acquisition.state === "connecting";
   const latest = acquisition.latest;
-  const signalSet = acquisition.status && (backendRunning || acquisition.frames.length > 0)
+  const hasBuffer = acquisition.frames.length > 0;
+  const signalSet = useMemo(() => acquisition.status &&
+    (backendRunning || hasBuffer)
     ? acquisition.status.signals.map((signal, index) => {
       const configured = signals.find(item => item.name === signal.name &&
         item.address === signal.address && item.value_type === signal.value_type);
       return configured ?? {
-        id: `${signal.name}@${signal.address.toString(16)}`,
+        id: signal.name + "@" + signal.address.toString(16),
         name: signal.name,
         address: signal.address,
         value_type: signal.value_type,
         unit: "",
         color: palette[index % palette.length],
       };
-    })
-    : active;
+    }) : active, [acquisition.status?.signals, backendRunning, hasBuffer, signals, active]);
 
   const live = acquisition.indicator === "live";
   const showExisting = backendRunning && acquisition.state !== "streaming";
@@ -68,7 +70,8 @@ export function MeasurementsPage({
       <div className="live-hero-heading">
         <div>
           <div className="live-hero-kicker"><span className="live-beacon" aria-hidden="true" />
-            LIVE VIEW <span className="live-hero-mode">SIMULATED ECU · XCP polling</span></div>
+            LIVE VIEW <span className="live-hero-mode">{import.meta.env.VITE_DEMO === "1"
+              ? "BROWSER DEMO · SYNTHETIC SIGNALS" : "ECU SIMULATION · XCP polling"}</span></div>
           <h2>{indicatorText[acquisition.indicator]}</h2>
           <p>{!connected
             ? "Connect the ECU simulator to view measurements as they arrive."
@@ -132,13 +135,16 @@ export function MeasurementsPage({
           Retry connection now</button>}
     </div>}
 
-    <TimeSeriesChart frames={acquisition.frames} signals={signalSet}
-      title={acquisition.paused ? "Live chart · paused" : "Live signal trends"} />
-
+    <LiveWindows
+      chart={<MemoTimeSeriesChart frames={acquisition.frames} signals={signalSet}
+        title={acquisition.paused ? "Live chart · paused" : "Live signal trends"} />}
+      values={<>
     <section className="panel" aria-label="Latest ECU values">
       <div className="panel-heading">
         <div><h2>Live signal values</h2>
-          <p>Values decoded from XCP memory · no synthetic frontend data</p></div>
+          <p>{import.meta.env.VITE_DEMO === "1"
+            ? "Synthesized signals for browser-only demonstration"
+            : "Values decoded from XCP memory · no synthetic frontend data"}</p></div>
         <span className="muted">{latest
           ? `Last XCP batch · ${new Date(latest.timestamp_ms).toLocaleTimeString()}`
           : "Waiting for measurements"}</span>
@@ -162,6 +168,8 @@ export function MeasurementsPage({
         </div>}
       </div>
     </section>
+      </>}
+    />
 
     <section className="panel signal-browser" aria-label="Live signal configuration">
       <div className="panel-heading">
