@@ -361,7 +361,14 @@ export function importProject(json: string, observed?: readonly ObservedEcuFile[
   }
   const migration = header.schemaVersion === 1 ? { from: 1 as const, to: 2 as const } : null;
   const project = migration ? migrateV1(parsed) : parseV2(parsed);
-  const checked = observed ? reconcileEcuFiles(project, observed) : { warnings: [], blockedSignalIds: [] };
+  const checked = observed ? reconcileEcuFiles(project, observed) : {
+    warnings: project.ecuFiles.map(file => ({
+      code: "UNVERIFIED_ECU_FILE" as const, fileId: file.id,
+      signalIds: project.signals.filter(signal => signal.fileId === file.id).map(signal => signal.id),
+      message: "ECU file identity has not been verified",
+    })),
+    blockedSignalIds: project.signals.filter(signal => signal.fileId !== undefined).map(signal => signal.id),
+  };
   return {
     project, migration,
     warnings: [
