@@ -137,8 +137,8 @@ This is a separately managed **single acquisition per simulator ECU**, not a new
 | Method | Route | Request/response |
 | --- | --- | --- |
 | POST | /api/v1/acquisitions | Body `{interval_ms:100,signals:[{name,address,value_type}]}`; returns HTTP 201 with acquisition status |
-| GET | /api/v1/acquisitions/current | Most recent acquisition status to allow UI reconnection; 404 before first acquisition |
-| GET | /api/v1/acquisitions/{id} | Status, monotonic sequence, subscribers, drops, last error |
+| GET | /api/v1/acquisitions/current | Most recent acquisition status including configured signals to allow UI reconnection; 404 before first acquisition |
+| GET | /api/v1/acquisitions/{id} | Status, active signals/type descriptors, monotonic sequence, subscribers, drops, last error |
 | POST | /api/v1/acquisitions/{id}/stop | Idempotently stop that acquisition; status |
 | GET (WebSocket) | /api/v1/acquisitions/{id}/stream | Subscribe to **existing** acquisition; no initial config message |
 
