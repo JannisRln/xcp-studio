@@ -17,6 +17,18 @@ pub enum TransportError {
 pub trait CanTransport: Send {
     fn send(&mut self, frame: CanFrame) -> Result<(), TransportError>;
     fn receive(&mut self) -> Result<Option<CanFrame>, TransportError>;
+
+    /// Receive with a caller-supplied upper bound.
+    ///
+    /// Implementations used for hardware must honor this budget, including
+    /// when no frames arrive. The default preserves existing non-blocking
+    /// transports; it cannot interrupt a blocking receive implementation.
+    fn receive_with_timeout(
+        &mut self,
+        _timeout: std::time::Duration,
+    ) -> Result<Option<CanFrame>, TransportError> {
+        self.receive()
+    }
 }
 
 #[derive(Default)]
