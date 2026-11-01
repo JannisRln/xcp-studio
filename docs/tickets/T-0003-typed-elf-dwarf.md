@@ -39,8 +39,8 @@ ELF symbol inspection and a DWARF compilation-unit summary exist; the typed vari
 
 ## Acceptance criteria
 
-- [ ] Fixture variable type, size and member offsets match compiled sources (integration assertions added, CI pending).
-- [ ] Invalid/stripped ELF and unsupported expressions are explicit errors/states.
+- [x] Fixture variable type, size and member offsets match compiled sources (GCC DWARF 4; Windows Rust tests in CI #41308853282).
+- [x] Invalid/stripped/relocatable ELF and unsupported location expressions have explicit errors/states (unit and integration tests).
 - [ ] Unresolved runtime address is never passed to read/write API.
 - [ ] Architecture/target endian and signedness are preserved in typed descriptors.
 
@@ -59,7 +59,7 @@ ELF symbol inspection and a DWARF compilation-unit summary exist; the typed vari
 
 ## Evidence and completion
 
-- Implementation PR / commit: this branch; PR pending assignment.
-- CI workflow/head SHA: pending (do not claim acceptance before CI).
+- Implementation PR: [#36](https://github.com/JannisRln/xcp-studio/pull/36), tested commit `74b86a70b61d569a80b9de2df6ee8b45a4b165ae` (read-only independent phase; not full ticket completion).
+- Windows CI evidence: [run #41308853282](https://github.com/JannisRln/xcp-studio/actions/runs/41308853282) — rust (fmt/Clippy/tests), frontend and docs passed at that commit.
 - Unit tests: `metadata::tests` validate malformed input, member offsets, recursive aliases and array overflow. Integration tests: `tests/dwarf_metadata.rs` validate GCC-compiled, linked DWARF 4 type/members/pointers/array, stripped ELF, and explicit rejection of unrelocated `.o` debug sections; CI results pending. Type expansion is capped to bound pathological metadata.
 - Known limitations: read-only crate API, no public REST schema change, unresolved static/runtime mapping, no arbitrary expression execution, no cross-unit type resolution, and no ECU pointer dereference. Member locations requiring expressions are marked unknown.
