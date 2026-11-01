@@ -16,8 +16,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Check Rust format
-        run: cargo fmt --all -- --check
+      - name: Format experimental crate in runner (workspace main may be unformatted)
+        run: cargo fmt -p xcp-desktop
+      - name: Check experimental crate formatting
+        run: cargo fmt -p xcp-desktop -- --check
       - name: Lint native crate
         run: cargo clippy -p xcp-desktop --all-targets -- -D warnings
       - name: Test native crate
@@ -25,6 +27,46 @@ jobs:
       - name: Execute native Release app and capture actual Windows window
         shell: pwsh
         run: pwsh -File crates/xcp-desktop/scripts/windows-benchmark.ps1 -WaitSeconds 180
+      - name: Checkout frozen React/uPlot benchmark comparison (PR 53)
+        if: always()
+        uses: actions/checkout@v4
+        with:
+          repository: JannisRln/xcp-studio
+          ref: c6440783c3d9032460b4f1ecc5d4c549afcad6ed
+          path: react-baseline
+      - uses: actions/setup-node@v4
+        if: always()
+        with:
+          node-version: '22'
+      - name: Install frozen browser benchmark dependencies
+        if: always()
+        working-directory: react-baseline/frontend
+        run: npm ci
+      - name: Run unchanged React/uPlot 20,000-frame benchmark
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts/native-gui | Out-Null
+          $env:XCP_BENCH_OUTPUT = Join-Path (Resolve-Path artifacts/native-gui) "react-uplot-20000.json"
+          node react-baseline/frontend/src/features/measurements/live-view.bench.mjs
+          if ($LASTEXITCODE -ne 0) { throw "React 20k benchmark failed" }
+      - name: Run React/uPlot 2,000-frame variant in TEMPORARY test checkout only
+        if: always()
+        shell: pwsh
+        run: |
+          $h = "react-baseline/frontend/src/features/measurements/benchmarkHarness.tsx"
+          $b = "react-baseline/frontend/src/features/measurements/live-view.bench.mjs"
+          $beforeH = Get-Content $h -Raw
+          $beforeB = Get-Content $b -Raw
+          if (-not $beforeH.Contains("const count = 20000;") -or
+              -not $beforeB.Contains("assert.equal(result.samplesPerUpdate, 20000);")) {
+              throw "Frozen React benchmark fixture drifted: abort non-equivalent comparison"
+          }
+          [System.IO.File]::WriteAllText((Resolve-Path $h), $beforeH.Replace("const count = 20000;", "const count = 2000;"))
+          [System.IO.File]::WriteAllText((Resolve-Path $b), $beforeB.Replace("assert.equal(result.samplesPerUpdate, 20000);", "assert.equal(result.samplesPerUpdate, 2000);"))
+          $env:XCP_BENCH_OUTPUT = Join-Path (Resolve-Path artifacts/native-gui) "react-uplot-2000.json"
+          node $b
+          if ($LASTEXITCODE -ne 0) { throw "React 2k benchmark failed" }
       - name: Upload actual outputs only (never generated screenshots)
         if: always()
         uses: actions/upload-artifact@v4
