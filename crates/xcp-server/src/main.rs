@@ -366,6 +366,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/xcp/snapshot", post(session_snapshot))
         .route("/api/xcp/stream", get(stream_upgrade))
         .route("/api/v1/acquisitions", post(acquisition::create))
+        .route("/api/v1/acquisitions/current", get(acquisition::current))
         .route("/api/v1/acquisitions/{id}", get(acquisition::status))
         .route("/api/v1/acquisitions/{id}/stop", post(acquisition::stop))
         .route("/api/v1/acquisitions/{id}/stream", get(acquisition::subscribe))
