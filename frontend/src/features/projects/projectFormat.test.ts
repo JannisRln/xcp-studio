@@ -47,10 +47,10 @@ function mutate(change: (project: ProjectDocument) => void): string {
 
 function legacyV1(): Record<string, unknown> {
   const { measurementWindows, chartLayout, schemaVersion: _version, ...rest } = fixture();
-  const windows = measurementWindows.map(w => ({
-    ...w,
-    ...chartLayout.items.find(item => item.windowId === w.id)!,
-  }));
+  const windows = measurementWindows.map(w => {
+    const { windowId: _windowId, ...position } = chartLayout.items.find(item => item.windowId === w.id)!;
+    return { ...w, ...position };
+  });
   return { ...rest, schemaVersion: 1, columns: chartLayout.columns, windows };
 }
 
