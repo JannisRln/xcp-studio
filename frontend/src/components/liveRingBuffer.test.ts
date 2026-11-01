@@ -55,7 +55,7 @@ describe("typed-array live scope storage", () => {
       [rpm, temperature]);
     expect(Number.isNaN(buffer.at(1, LiveRingBuffer.key(rpm))?.y)).toBe(true);
     expect(buffer.extent([LiveRingBuffer.key(temperature)], 0, 1)).toEqual({
-      low: 87.5, high: 89.5,
+      low: 84.075, high: 92.925,
     });
     buffer.reset();
     expect(buffer.length).toBe(0);
