@@ -7,12 +7,12 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex};
+use xcp_core::session::{SessionActor, SessionError, SessionHandle, SessionState};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::{interval, Duration, MissedTickBehavior};
 use xcp_core::xcp::{CanIds, SimulatedSlave, SimulatedTransport, XcpMaster};
 
-type Session = Arc<Mutex<Option<XcpMaster<SimulatedTransport>>>>;
+type Session = SessionHandle;
 
 #[derive(Serialize)]
 struct Health {
@@ -93,8 +93,22 @@ struct ReadResult {
     hex: String,
 }
 
+/// Offload synchronous XCP worker calls so the Tokio I/O threads remain responsive.
+async fn execute_xcp<T: Send + 'static>(
+    job: impl FnOnce() -> Result<T, SessionError> + Send + 'static,
+) -> Result<T, (StatusCode, Json<ApiError>)> {
+    tokio::task::spawn_blocking(job)
+        .await
+        .map_err(session_error)?
+        .map_err(session_error)
+}
+
 async fn session_status(State(session): State<Session>) -> Json<SessionStatus> {
-    let connected = session.lock().unwrap_or_else(|e| e.into_inner()).is_some();
+    let connected = tokio::task::spawn_blocking(move || session.state())
+        .await
+        .ok()
+        .and_then(Result::ok)
+        == Some(SessionState::Connected);
     Json(SessionStatus {
         connected,
         transport: "simulation",
@@ -104,21 +118,7 @@ async fn session_status(State(session): State<Session>) -> Json<SessionStatus> {
 async fn session_connect(
     State(session): State<Session>,
 ) -> Result<Json<SessionStatus>, (StatusCode, Json<ApiError>)> {
-    let mut guard = session.lock().unwrap_or_else(|e| e.into_inner());
-    if guard.is_none() {
-        let ids = CanIds::default();
-        let mut slave = SimulatedSlave::new(0x1000, 65536);
-        slave
-            .load(0x1000, &1850u32.to_le_bytes())
-            .map_err(session_error)?;
-        slave
-            .load(0x1004, &88.5f32.to_le_bytes())
-            .map_err(session_error)?;
-        let transport = SimulatedTransport::new(slave, ids);
-        let mut master = XcpMaster::new(transport, ids);
-        master.connect().map_err(session_error)?;
-        *guard = Some(master);
-    }
+    execute_xcp(move || session.connect()).await?;
     Ok(Json(SessionStatus {
         connected: true,
         transport: "simulation",
@@ -128,11 +128,7 @@ async fn session_connect(
 async fn session_disconnect(
     State(session): State<Session>,
 ) -> Result<Json<SessionStatus>, (StatusCode, Json<ApiError>)> {
-    let mut guard = session.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(master) = guard.as_mut() {
-        master.disconnect().map_err(session_error)?;
-    }
-    *guard = None;
+    execute_xcp(move || session.disconnect()).await?;
     Ok(Json(SessionStatus {
         connected: false,
         transport: "simulation",
@@ -155,16 +151,10 @@ async fn session_read(
     if request.count == 0 || request.count > 4096 {
         return Err(session_error("count must be between 1 and 4096"));
     }
-    let mut guard = session.lock().unwrap_or_else(|e| e.into_inner());
-    let master = guard
-        .as_mut()
-        .ok_or_else(|| session_error("XCP session not connected"))?;
-    let bytes = master
-        .read(request.address, request.count)
-        .map_err(session_error)?;
+    let bytes = execute_xcp(move || session.read(request.address, request.count)).await?;
     let hex = bytes
         .iter()
-        .map(|b| format!("{b:02X}"))
+        .map(|byte| format!("{byte:02X}"))
         .collect::<Vec<_>>()
         .join(" ");
     Ok(Json(ReadResult {
@@ -244,22 +234,38 @@ async fn session_snapshot(
     if request.signals.is_empty() || request.signals.len() > 64 {
         return Err(session_error("signals must contain between 1 and 64 entries"));
     }
-    if request.signals.iter().any(|signal| signal.name.trim().is_empty() || signal.name.len() > 128) {
+    if request
+        .signals
+        .iter()
+        .any(|signal| signal.name.trim().is_empty() || signal.name.len() > 128)
+    {
         return Err(session_error("signal names must contain 1 to 128 characters"));
     }
-    let mut guard = session.lock().unwrap_or_else(|e| e.into_inner());
-    let master = guard.as_mut().ok_or_else(|| session_error("XCP session not connected"))?;
-    let mut samples = Vec::with_capacity(request.signals.len());
-    for signal in request.signals {
-        let bytes = master.read(signal.address, signal.value_type.byte_count()).map_err(session_error)?;
-        let value = signal.value_type.decode(&bytes);
-        if !value.is_finite() {
-            return Err(session_error("signal contains a non-finite value"));
+
+    // A single actor owns all MTA transitions; requests from multiple
+    // WebSocket clients cannot corrupt one another's read operations.
+    let samples = execute_xcp(move || {
+        let mut samples = Vec::with_capacity(request.signals.len());
+        for signal in request.signals {
+            let bytes = session.read(signal.address, signal.value_type.byte_count())?;
+            let value = signal.value_type.decode(&bytes);
+            if !value.is_finite() {
+                return Err(SessionError::Xcp(xcp_core::xcp::XcpError::InvalidResponse));
+            }
+            samples.push(SnapshotSample {
+                name: signal.name,
+                address: signal.address,
+                value,
+            });
         }
-        samples.push(SnapshotSample { name: signal.name, address: signal.address, value });
-    }
-    let timestamp_ms = SystemTime::now().duration_since(UNIX_EPOCH)
-        .map_err(session_error)?.as_millis();
+        Ok(samples)
+    })
+    .await?;
+
+    let timestamp_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(session_error)?
+        .as_millis();
     Ok(Json(SnapshotResult { timestamp_ms, samples }))
 }
 
@@ -328,9 +334,20 @@ async fn stream_client(mut socket: WebSocket, session: Session) {
 }
 
 
+/// Build one simulator and one XCP command owner per server process.
+fn simulated_session_actor() -> Result<SessionActor, xcp_core::xcp::XcpError> {
+    let ids = CanIds::default();
+    let mut slave = SimulatedSlave::new(0x1000, 65536);
+    slave.load(0x1000, &1850u32.to_le_bytes())?;
+    slave.load(0x1004, &88.5f32.to_le_bytes())?;
+    let transport = SimulatedTransport::new(slave, ids);
+    Ok(SessionActor::spawn(XcpMaster::new(transport, ids)))
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let session: Session = Arc::new(Mutex::new(None));
+    let actor = simulated_session_actor()?;
+    let session = actor.handle();
     let app = Router::new()
         .route("/api/health", get(health))
         .route("/api/v1/health", get(api::v1::health))
