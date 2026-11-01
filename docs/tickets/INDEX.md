@@ -11,7 +11,7 @@
 | T-0001 | [CI and quality gates](T-0001-ci-quality-gates.md) | P0 | review | — | [#4](https://github.com/JannisRln/xcp-studio/issues/4) |
 | T-0002 | [Modular frontend architecture](T-0002-frontend-architecture.md) | P0 | in-progress | — | [#5](https://github.com/JannisRln/xcp-studio/issues/5) |
 | T-0003 | [Typed ELF/DWARF](T-0003-typed-elf-dwarf.md) | P0 | ready | — | [#6](https://github.com/JannisRln/xcp-studio/issues/6) |
-| T-0004 | [XCP session actor](T-0004-xcp-session-actor.md) | P0 | ready | — | [#7](https://github.com/JannisRln/xcp-studio/issues/7) |
+| T-0004 | [XCP session actor](T-0004-xcp-session-actor.md) | P0 | in-progress | — | [#7](https://github.com/JannisRln/xcp-studio/issues/7) |
 | T-0005 | [Shared acquisition + DAQ](T-0005-shared-acquisition.md) | P0 | blocked | T-0004, T-0012 | [#8](https://github.com/JannisRln/xcp-studio/issues/8) |
 | T-0006 | [Measurement charts and export](T-0006-measurement-workspace.md) | P0 | blocked | T-0002, T-0005 | [#9](https://github.com/JannisRln/xcp-studio/issues/9) |
 | T-0007 | [Simulated calibration transaction](T-0007-calibration-transaction.md) | P0 | blocked | T-0003, T-0004, T-0013 | [#10](https://github.com/JannisRln/xcp-studio/issues/10) |
