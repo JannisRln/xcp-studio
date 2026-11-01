@@ -245,6 +245,10 @@ fn transport_disconnect_faults_io_and_requires_reconnect() {
     ));
     assert_eq!(session.state().unwrap(), SessionState::Faulted);
     assert!(matches!(session.write(0x1000, &[1]), Err(SessionError::Faulted)));
+    // A response to the failed upload may still be buffered. Explicit
+    // DISCONNECT must discard it before treating a new ACK as definitive.
+    session.disconnect().unwrap();
+    assert_eq!(session.state().unwrap(), SessionState::Disconnected);
     session.connect().unwrap();
     assert_eq!(session.read(0x1000, 1).unwrap(), vec![0]);
 }
