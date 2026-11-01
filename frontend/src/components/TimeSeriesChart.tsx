@@ -10,7 +10,8 @@ export function chartPoints(frames: MeasurementFrame[], signal: SignalDefinition
       ? [{ t: frame.timestamp_ms, y: sample.value }] : [];
   });
 }
-import { chartViewport, groupSignalsByUnit } from "./chartMath";
+import { chartViewport, groupSignalsByUnit, nearestChartFrame } from "./chartMath";
+import { cursorFrequencyHz, frameTimeDomain, panViewport, zoomViewport } from "./measurementTools";
 import { alignedPlotData, cursorValue } from "./plotData";
 
 type Props = {
@@ -29,19 +30,21 @@ type LaneProps = {
   viewport: Viewport;
   markers: Measurements;
   onMeasure: (time: number) => void;
+  onZoom: (time: number, factor: number) => void;
+  onPan: (deltaMs: number) => void;
 };
 
-function ChartLane({ unit, signals, frames, viewport, markers, onMeasure }: LaneProps) {
+function ChartLane({ unit, signals, frames, viewport, markers, onMeasure, onZoom, onPan }: LaneProps) {
   const host = useRef<HTMLDivElement>(null);
   const plot = useRef<uPlot | null>(null);
-  const onMeasureRef = useRef(onMeasure);
+  const interactionRef = useRef({ onMeasure, onZoom, onPan, viewport });
   const markersRef = useRef(markers);
   const seriesKey = signals.map(signal => signal.id + "/" + signal.color).join(",");
   const aligned = useMemo(() =>
     alignedPlotData(frames, signals, 1400) as uPlot.AlignedData,
     [frames, signals],
   );
-  onMeasureRef.current = onMeasure;
+  interactionRef.current = { onMeasure, onZoom, onPan, viewport };
   markersRef.current = markers;
 
   useEffect(() => {
@@ -98,14 +101,50 @@ function ChartLane({ unit, signals, frames, viewport, markers, onMeasure }: Lane
     };
     const instance = new uPlot(opts, aligned, element);
     plot.current = instance;
-    const onClick = () => {
-      const index = instance.cursor.idx;
-      if (typeof index === "number" && index >= 0 && index < instance.data[0].length) {
-        const value = instance.data[0][index];
-        if (typeof value === "number") onMeasureRef.current(value);
-      }
+    // Pointer time is resolved against full-resolution samples by the parent.
+    // Snapping to uPlot's decimated cursor index would lose short spikes.
+    let drag: { pointerId: number; lastX: number; moved: boolean } | null = null;
+    let suppressClick = false;
+    const onClick = (event: MouseEvent) => {
+      if (suppressClick) { suppressClick = false; return; }
+      if (!instance.data[0].length) return;
+      const time = instance.posToVal(event.offsetX, "x");
+      if (Number.isFinite(time)) interactionRef.current.onMeasure(time);
+    };
+    const onWheel = (event: WheelEvent) => {
+      if (!instance.data[0].length) return;
+      event.preventDefault();
+      const time = instance.posToVal(event.offsetX, "x");
+      interactionRef.current.onZoom(time, event.deltaY < 0 ? 0.8 : 1.25);
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (!event.shiftKey || event.button !== 0) return;
+      drag = { pointerId: event.pointerId, lastX: event.clientX, moved: false };
+      instance.over.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      const deltaPx = event.clientX - drag.lastX;
+      if (Math.abs(deltaPx) < 1) return;
+      drag.lastX = event.clientX;
+      drag.moved = true;
+      const { viewport: current, onPan: pan } = interactionRef.current;
+      pan(deltaPx / Math.max(1, instance.over.clientWidth) * (current.end - current.start));
+    };
+    const onPointerEnd = (event: PointerEvent) => {
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      suppressClick = drag.moved;
+      drag = null;
+      if (instance.over.hasPointerCapture(event.pointerId))
+        instance.over.releasePointerCapture(event.pointerId);
     };
     instance.over.addEventListener("click", onClick);
+    instance.over.addEventListener("wheel", onWheel, { passive: false });
+    instance.over.addEventListener("pointerdown", onPointerDown);
+    instance.over.addEventListener("pointermove", onPointerMove);
+    instance.over.addEventListener("pointerup", onPointerEnd);
+    instance.over.addEventListener("pointercancel", onPointerEnd);
     const resize = new ResizeObserver(entries => {
       const width = entries[0]?.contentRect.width ?? element.clientWidth;
       if (width >= 200) instance.setSize({ width: Math.floor(width), height: 242 });
@@ -114,6 +153,11 @@ function ChartLane({ unit, signals, frames, viewport, markers, onMeasure }: Lane
     return () => {
       resize.disconnect();
       instance.over.removeEventListener("click", onClick);
+      instance.over.removeEventListener("wheel", onWheel);
+      instance.over.removeEventListener("pointerdown", onPointerDown);
+      instance.over.removeEventListener("pointermove", onPointerMove);
+      instance.over.removeEventListener("pointerup", onPointerEnd);
+      instance.over.removeEventListener("pointercancel", onPointerEnd);
       instance.destroy();
       plot.current = null;
     };
@@ -149,6 +193,19 @@ export function TimeSeriesChart({ frames, signals, title = "Time series" }: Prop
   const [signalId, setSignalId] = useState("");
 
   const viewport = useMemo(() => chartViewport(frames, rangeMs, panMs), [frames, rangeMs, panMs]);
+  const domain = useMemo(() => frameTimeDomain(frames), [frames]);
+  const zoom = useCallback((time: number, factor: number) => {
+    if (!domain) return;
+    const next = zoomViewport(domain, viewport, factor, time);
+    setRangeMs(next.rangeMs);
+    setPanMs(next.panMs);
+  }, [domain, viewport]);
+  const pan = useCallback((deltaMs: number) => {
+    if (!domain) return;
+    const next = panViewport(domain, viewport, deltaMs);
+    setRangeMs(next.rangeMs);
+    setPanMs(next.panMs);
+  }, [domain, viewport]);
   const visible = useMemo(() =>
     frames.filter(frame => frame.timestamp_ms >= viewport.start &&
       frame.timestamp_ms <= viewport.end), [frames, viewport.start, viewport.end]);
@@ -158,11 +215,14 @@ export function TimeSeriesChart({ frames, signals, title = "Time series" }: Prop
   const measured = signals.find(signal => signal.id === signalId) ?? signals[0];
   const a = measured ? cursorValue(frames, measured, markers.a) : null;
   const b = measured ? cursorValue(frames, measured, markers.b) : null;
+  const frequency = cursorFrequencyHz(a?.time ?? null, b?.time ?? null);
 
   const measure = useCallback((time: number) => {
-    setMarkers(previous => ({ ...previous, [target]: time }));
+    const nearest = nearestChartFrame(frames, time);
+    if (!nearest) return;
+    setMarkers(previous => ({ ...previous, [target]: nearest.timestamp_ms }));
     setTarget(previous => previous === "a" ? "b" : "a");
-  }, [target]);
+  }, [frames, target]);
 
   const oldest = frames.length ? frames[0].timestamp_ms : 0;
   const panStep = Math.max(1000, rangeMs / 2);
@@ -178,6 +238,8 @@ export function TimeSeriesChart({ frames, signals, title = "Time series" }: Prop
         <select id="chart-time-range" value={rangeMs} onChange={event => {
           setRangeMs(Number(event.target.value)); setPanMs(0);
         }}>
+          {![0, 5000, 15000, 60000, 300000].includes(rangeMs) &&
+            <option value={rangeMs}>Custom · {(rangeMs / 1000).toFixed(2)} s</option>}
           <option value={0}>All buffered</option>
           <option value={5000}>Last 5 seconds</option>
           <option value={15000}>Last 15 seconds</option>
@@ -215,13 +277,14 @@ export function TimeSeriesChart({ frames, signals, title = "Time series" }: Prop
         type="button" onClick={() => setTarget("b")}>Set cursor B</button>
       <button className="button small" type="button" onClick={() => setMarkers({ a: null, b: null })}>
         Clear cursors</button>
-      <span className="muted">Click a chart point to place the selected cursor.</span>
+      <span className="muted">Click to place A/B · wheel to zoom · Shift+drag to pan.</span>
     </div>
 
     <div className="uplot-lanes">
       {lanes.map(group => <ChartLane key={group.unit}
         unit={group.unit} signals={group.signals} frames={visible}
-        viewport={viewport} markers={markers} onMeasure={measure} />)}
+        viewport={viewport} markers={markers} onMeasure={measure}
+        onZoom={zoom} onPan={pan} />)}
       {!lanes.length && <div className="empty-state">Select a signal to show its live trend.</div>}
     </div>
     <div className="measurement-readout" role="status">
@@ -232,6 +295,7 @@ export function TimeSeriesChart({ frames, signals, title = "Time series" }: Prop
         {b?.value !== null && b?.value !== undefined ? " / " + b.value.toFixed(3) : ""}
       </span>
       <strong>Δt: {a && b ? ((b.time - a.time) / 1000).toFixed(3) + " s" : "—"}</strong>
+      <strong>1/|Δt|: {frequency === null ? "—" : frequency.toFixed(3) + " Hz"}</strong>
       <strong>ΔY: {a?.value !== null && a?.value !== undefined &&
         b?.value !== null && b?.value !== undefined
           ? (b.value - a.value).toFixed(3) + " " + (measured?.unit ?? "")
