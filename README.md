@@ -24,6 +24,12 @@ Windows-first ECU measurement and calibration workstation under active developme
 
 **For coding agents:** begin with [AGENTS.md](AGENTS.md). Claim a READY ticket under docs/tickets/, use its owned paths, link the PR to requirements and evidence, and do not mark DONE before green CI and merge. GitHub Issues #3–#13 remain linked discussion trackers; Markdown tickets are the reviewed implementation contract. Cross-cutting decisions are in [ADRs](docs/adr/README.md).
 
+## Interactive browser preview (no ECU)
+
+A GitHub Pages demo build uses the real React UI, **uPlot Canvas** signal charts, configurable measurement windows and simulated, visibly changing measurements. The browser-only REST/WebSocket simulator is explicitly labeled and **cannot connect to an ECU**. The normal local build still uses the real Rust backend.
+
+The [Pages setup guide](docs/github-pages-demo.md) describes the deployment workflow and the required repository administrator action to enable GitHub Pages for this private repository. Until Pages is enabled and its site is verified, the public URL is **not** claimed to be live.
+
 ## Primary workflow: Live View
 
 The application opens the **Live View** first. Connect the XCP simulator, choose signals, then start a backend-owned acquisition to watch live values and charts. It shows browser-observed receive rate, sample freshness, connection state and detected gaps, and reattaches to the same backend acquisition after transient WebSocket failures. **Stopping the backend acquisition is explicit; leaving the page does not stop it.** CSV export is optional and is only a bounded recent browser preview. Recording is deferred behind reliability and usability of live monitoring.
