@@ -162,7 +162,7 @@ async function captureScreenshot() {
     "--no-first-run", "--no-default-browser-check",
     "--no-sandbox", "--remote-debugging-address=127.0.0.1",
     "--remote-debugging-port=0", "--remote-allow-origins=*",
-    "--window-size=1440,1100",
+    "--window-size=1440,1600",
     "--user-data-dir=" + profile,
     api + "/",
   ], root);
@@ -238,7 +238,7 @@ async function captureScreenshot() {
     await cdp("Page.enable");
     await cdp("Runtime.enable");
     await cdp("Emulation.setDeviceMetricsOverride", {
-      width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false,
+      width: 1440, height: 1600, deviceScaleFactor: 1, mobile: false,
     });
     await cdp("Page.navigate", { url: api + "/" });
 
@@ -262,17 +262,20 @@ async function captureScreenshot() {
         "coolant:(document.body?.innerText||'').includes('88.5')," +
         "curves:[...document.querySelectorAll('.timeseries polyline')]" +
         ".filter(line => (line.getAttribute('points')||'').includes(',')).length," +
+        "frames:parseInt((document.querySelector('.plot-panel .panel-heading .muted')?.textContent||'0').split('/')[0],10)," +
+        "rate:parseFloat(document.querySelector('.live-metrics>div:nth-child(2) strong')?.textContent||'0')," +
         "body:(document.body?.innerText||'').slice(0,600)}))()",
       );
       if (observation?.title === "Live View" && observation.live &&
-          observation.rpm && observation.coolant && observation.curves >= 2) {
+          observation.rpm && observation.coolant && observation.curves >= 2 &&
+          observation.frames >= 6 && observation.rate > 0) {
         break;
       }
       await delay(250);
     }
     assert.equal(observation?.title, "Live View", "Unexpected page heading");
     assert.ok(observation.live && observation.rpm && observation.coolant &&
-      observation.curves >= 2,
+      observation.curves >= 2 && observation.frames >= 6 && observation.rate > 0,
       "Actual React UI did not render live data and 2 curves: " + JSON.stringify(observation));
     console.log("PASS real Edge browser rendered LIVE badge, RPM, coolant and chart polylines");
 
@@ -294,7 +297,7 @@ async function captureScreenshot() {
     console.log("PASS live chart pause/resume interaction without stopping acquisition");
 
     const screenshot = await cdp("Page.captureScreenshot", {
-      format: "png", captureBeyondViewport: false, fromSurface: true,
+      format: "png", captureBeyondViewport: true, fromSurface: true,
     });
     const shot = resolve(output);
     writeFileSync(shot, Buffer.from(screenshot.data, "base64"));
