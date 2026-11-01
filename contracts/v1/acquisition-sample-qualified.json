@@ -12,7 +12,7 @@
     {
       "name": "Engine speed",
       "address": 4096,
-      "value": 1850,
+      "value": 1850.0,
       "value_type": "u32",
       "quality": "valid",
       "address_origin": "manual"
