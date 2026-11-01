@@ -48,6 +48,10 @@ pub enum XcpError {
     InvalidParameters,
     #[error("unsupported XCP communication mode or maximum CTO")]
     UnsupportedCapabilities,
+    #[error("XCP command deadline exceeded; the ECU outcome may be unknown")]
+    DeadlineExceeded,
+    #[error("XCP command queue is full")]
+    CommandQueueFull,
 }
 
 pub struct XcpMaster<T: CanTransport> {
