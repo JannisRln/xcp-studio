@@ -1,11 +1,11 @@
 ---
 id: T-0001
 title: Reproducible CI, lockfiles and mandatory quality gates
-status: ready
+status: in-progress
 priority: P0
 area: quality
-owner: unassigned
-branch: none
+owner: assistant-ci-agent
+branch: chore/T-0001-ci-and-branch-cleanup
 github_issue: 4
 depends_on: []
 requirements: [QA-001, QA-002, QA-005, QA-006]
@@ -15,7 +15,7 @@ requirements: [QA-001, QA-002, QA-005, QA-006]
 
 ## Context / desired behavior
 
-Windows CI currently formats Rust in a temporary runner, runs cargo test, and uses npm install/build/test. There is no frontend lockfile, mandatory Clippy or docs validation yet.
+Windows CI formats Rust in a temporary runner, runs cargo test and uses npm install/build/test. The docs validator was added and passed in PR #19; frontend lockfile and Clippy/npm ci remain incomplete. This ticket also implements safe cleanup for source branches with already merged PRs.
 
 **Desired outcome:** Reproducible CI, lockfiles and mandatory quality gates. Implement according to [product specification](../product-specification.md), [architecture](../architecture.md) and [API contract](../api-contract.md), where applicable.
 
