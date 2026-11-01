@@ -141,6 +141,13 @@ fn scalar<R: Reader>(
     })
 }
 
+fn extent_from_bounds(lower: i128, upper: i128) -> Option<u64> {
+    upper
+        .checked_sub(lower)
+        .and_then(|difference| difference.checked_add(1))
+        .and_then(|extent| u64::try_from(extent).ok())
+}
+
 /// DW_AT_count is an extent; DW_AT_upper_bound is an inclusive index.
 /// An explicit lower bound must be subtracted before computing the extent.
 /// For C-style subranges without a lower bound, DWARF defaults to zero.
@@ -154,10 +161,7 @@ fn subrange_count<R: Reader>(
         return Ok(None);
     };
     let lower = scalar(entry, gimli::DW_AT_lower_bound)?.unwrap_or(0);
-    Ok(upper
-        .checked_sub(lower)
-        .and_then(|difference| difference.checked_add(1))
-        .and_then(|extent| u64::try_from(extent).ok()))
+    Ok(extent_from_bounds(lower, upper))
 }
 
 /// Decode only a single constant member-offset operation. DW_OP_plus_uconst
@@ -440,7 +444,13 @@ pub fn inspect_typed_dwarf(bytes: &[u8]) -> Result<TypedDwarf, MetadataError> {
                 tag: entry.tag(),
                 name: short_name(&dwarf, &unit, entry)?,
                 type_id: unit_reference(entry)?,
-                byte_size: numeric(entry, gimli::DW_AT_byte_size)?,
+                byte_size: match numeric(entry, gimli::DW_AT_byte_size)? {
+                    Some(size) => Some(size),
+                    None if entry.tag() == gimli::DW_TAG_pointer_type => {
+                        Some(u64::from(unit.encoding().address_size))
+                    }
+                    None => None,
+                },
                 encoding: numeric(entry, gimli::DW_AT_encoding)?,
                 count: subrange_count(entry)?,
                 member_offset: if entry.tag() == gimli::DW_TAG_member {
@@ -603,6 +613,16 @@ mod tests {
         assert_eq!(decode(&[0x23, 0x08, 0x06]).unwrap(), None);
         // Truncated ULEB128 is invalid DWARF, not a zero offset.
         assert!(decode(&[0x23, 0x80]).is_err());
+    }
+
+    #[test]
+    fn subranges_use_inclusive_bounds_without_overflow() {
+        assert_eq!(extent_from_bounds(0, 2), Some(3));
+        assert_eq!(extent_from_bounds(5, 8), Some(4));
+        assert_eq!(extent_from_bounds(-3, 2), Some(6));
+        assert_eq!(extent_from_bounds(4, 3), Some(0));
+        assert_eq!(extent_from_bounds(i128::MIN, i128::MAX), None);
+        assert_eq!(extent_from_bounds(-1, i128::MAX), None);
     }
 
     #[test]
