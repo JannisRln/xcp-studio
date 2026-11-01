@@ -68,7 +68,7 @@ export function parseSessionV1(value: unknown): SessionV1 {
 }
 
 export function parseReadV1(value: unknown): ReadResultV1 {
-  if (!isV1(value) || !Number.isSafeInteger(value.address) ||
+  if (!isV1(value) || typeof value.address !== "number" || !Number.isSafeInteger(value.address) ||
       (value.address as number) < 0 || (value.address as number) > 0xffffffff ||
       !Array.isArray(value.bytes) || value.bytes.length > 4096 ||
       !value.bytes.every((byte: unknown) => Number.isInteger(byte) && (byte as number) >= 0 && (byte as number) <= 255) ||
