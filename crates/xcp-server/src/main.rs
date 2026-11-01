@@ -1,5 +1,5 @@
 use axum::{
-    extract::{DefaultBodyLimit, State},
+    extract::{ws::{Message, WebSocket, WebSocketUpgrade}, DefaultBodyLimit, State},
     http::StatusCode,
     routing::{get, post},
     Json, Router,
@@ -7,6 +7,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::time::{interval, Duration, MissedTickBehavior};
 use xcp_core::xcp::{CanIds, SimulatedSlave, SimulatedTransport, XcpMaster};
 
 type Session = Arc<Mutex<Option<XcpMaster<SimulatedTransport>>>>;
@@ -184,7 +185,7 @@ struct SnapshotSignalRequest {
     value_type: SnapshotValueType,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum SnapshotValueType {
     U8,
@@ -260,6 +261,73 @@ async fn session_snapshot(
     Ok(Json(SnapshotResult { timestamp_ms, samples }))
 }
 
+
+#[derive(Deserialize)]
+struct StreamConfig {
+    interval_ms: u64,
+    signals: Vec<SnapshotSignalRequest>,
+}
+
+/// Streams bounded periodic XCP snapshots to one connected WebSocket client.
+/// Each connection owns its schedule; hardware DAQ and shared acquisition are separate work.
+async fn stream_upgrade(
+    ws: WebSocketUpgrade,
+    State(session): State<Session>,
+) -> impl axum::response::IntoResponse {
+    ws.on_upgrade(move |socket| stream_client(socket, session))
+}
+
+async fn stream_client(mut socket: WebSocket, session: Session) {
+    let config = match socket.recv().await {
+        Some(Ok(Message::Text(text))) => serde_json::from_str::<StreamConfig>(&text).ok(),
+        _ => None,
+    };
+    let Some(config) = config else {
+        let _ = socket.send(Message::Text(r#"{"error":"expected stream configuration JSON"}"#.into())).await;
+        return;
+    };
+    if !(20..=10_000).contains(&config.interval_ms)
+        || config.signals.is_empty()
+        || config.signals.len() > 64
+        || config.signals.iter().any(|s| s.name.trim().is_empty() || s.name.len() > 128)
+    {
+        let _ = socket.send(Message::Text(r#"{"error":"invalid interval or signals"}"#.into())).await;
+        return;
+    }
+    let mut ticker = interval(Duration::from_millis(config.interval_ms));
+    ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    loop {
+        tokio::select! {
+            _ = ticker.tick() => {
+                let request = SnapshotRequest {
+                    signals: config.signals.iter().map(|s| SnapshotSignalRequest {
+                        name: s.name.clone(), address: s.address,
+                        value_type: s.value_type.clone(),
+                    }).collect(),
+                };
+                let result = session_snapshot(State(session.clone()), Json(request)).await;
+                let payload = match result {
+                    Ok(Json(snapshot)) => serde_json::to_string(&snapshot).ok(),
+                    Err((_, Json(error))) => serde_json::to_string(&error).ok(),
+                };
+                let Some(payload) = payload else { break };
+                if socket.send(Message::Text(payload.into())).await.is_err() { break; }
+                if result_is_error(&session) { break; }
+            }
+            incoming = socket.recv() => {
+                match incoming {
+                    Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
+                    _ => {}
+                }
+            }
+        }
+    }
+}
+
+fn result_is_error(session: &Session) -> bool {
+    session.lock().unwrap_or_else(|e| e.into_inner()).is_none()
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let session: Session = Arc::new(Mutex::new(None));
@@ -271,6 +339,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/xcp/disconnect", post(session_disconnect))
         .route("/api/xcp/read", post(session_read))
         .route("/api/xcp/snapshot", post(session_snapshot))
+        .route("/api/xcp/stream", get(stream_upgrade))
         .layer(DefaultBodyLimit::max(32 * 1024 * 1024))
         .with_state(session);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:8080").await?;
