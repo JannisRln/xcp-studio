@@ -6,6 +6,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 use xcp_core::xcp::{CanIds, SimulatedSlave, SimulatedTransport, XcpMaster};
 
 type Session = Arc<Mutex<Option<XcpMaster<SimulatedTransport>>>>;
@@ -170,6 +171,95 @@ async fn session_read(
     }))
 }
 
+
+#[derive(Deserialize)]
+struct SnapshotRequest {
+    signals: Vec<SnapshotSignalRequest>,
+}
+
+#[derive(Deserialize)]
+struct SnapshotSignalRequest {
+    name: String,
+    address: u32,
+    value_type: SnapshotValueType,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum SnapshotValueType {
+    U8,
+    U16,
+    U32,
+    I8,
+    I16,
+    I32,
+    F32,
+    F64,
+}
+
+impl SnapshotValueType {
+    fn byte_count(&self) -> usize {
+        match self {
+            Self::U8 | Self::I8 => 1,
+            Self::U16 | Self::I16 => 2,
+            Self::U32 | Self::I32 | Self::F32 => 4,
+            Self::F64 => 8,
+        }
+    }
+
+    fn decode(&self, bytes: &[u8]) -> f64 {
+        match self {
+            Self::U8 => f64::from(bytes[0]),
+            Self::I8 => f64::from(bytes[0] as i8),
+            Self::U16 => f64::from(u16::from_le_bytes([bytes[0], bytes[1]])),
+            Self::I16 => f64::from(i16::from_le_bytes([bytes[0], bytes[1]])),
+            Self::U32 => f64::from(u32::from_le_bytes(bytes.try_into().expect("four bytes"))),
+            Self::I32 => f64::from(i32::from_le_bytes(bytes.try_into().expect("four bytes"))),
+            Self::F32 => f64::from(f32::from_le_bytes(bytes.try_into().expect("four bytes"))),
+            Self::F64 => f64::from_le_bytes(bytes.try_into().expect("eight bytes")),
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct SnapshotSample {
+    name: String,
+    address: u32,
+    value: f64,
+}
+
+#[derive(Serialize)]
+struct SnapshotResult {
+    timestamp_ms: u128,
+    samples: Vec<SnapshotSample>,
+}
+
+async fn session_snapshot(
+    State(session): State<Session>,
+    Json(request): Json<SnapshotRequest>,
+) -> Result<Json<SnapshotResult>, (StatusCode, Json<ApiError>)> {
+    if request.signals.is_empty() || request.signals.len() > 64 {
+        return Err(session_error("signals must contain between 1 and 64 entries"));
+    }
+    if request.signals.iter().any(|signal| signal.name.trim().is_empty() || signal.name.len() > 128) {
+        return Err(session_error("signal names must contain 1 to 128 characters"));
+    }
+    let mut guard = session.lock().unwrap_or_else(|e| e.into_inner());
+    let master = guard.as_mut().ok_or_else(|| session_error("XCP session not connected"))?;
+    let mut samples = Vec::with_capacity(request.signals.len());
+    for signal in request.signals {
+        let bytes = master.read(signal.address, signal.value_type.byte_count()).map_err(session_error)?;
+        let value = signal.value_type.decode(&bytes);
+        if !value.is_finite() {
+            return Err(session_error("signal contains a non-finite value"));
+        }
+        samples.push(SnapshotSample { name: signal.name, address: signal.address, value });
+    }
+    let timestamp_ms = SystemTime::now().duration_since(UNIX_EPOCH)
+        .map_err(session_error)?.as_millis();
+    Ok(Json(SnapshotResult { timestamp_ms, samples }))
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let session: Session = Arc::new(Mutex::new(None));
@@ -180,10 +270,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/xcp/connect", post(session_connect))
         .route("/api/xcp/disconnect", post(session_disconnect))
         .route("/api/xcp/read", post(session_read))
+        .route("/api/xcp/snapshot", post(session_snapshot))
         .layer(DefaultBodyLimit::max(32 * 1024 * 1024))
         .with_state(session);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:8080").await?;
     println!("XCP Studio API: http://127.0.0.1:8080/api/health");
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod snapshot_tests {
+    use super::*;
+
+    #[test]
+    fn decodes_simulator_engine_speed() {
+        let bytes = 1850u32.to_le_bytes();
+        assert_eq!(SnapshotValueType::U32.byte_count(), 4);
+        assert_eq!(SnapshotValueType::U32.decode(&bytes), 1850.0);
+    }
+
+    #[test]
+    fn decodes_simulator_coolant_temperature() {
+        let bytes = 88.5f32.to_le_bytes();
+        assert_eq!(SnapshotValueType::F32.decode(&bytes), 88.5);
+    }
+
+    #[test]
+    fn decodes_signed_values() {
+        assert_eq!(SnapshotValueType::I16.decode(&(-123i16).to_le_bytes()), -123.0);
+    }
 }
