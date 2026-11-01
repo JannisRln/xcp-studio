@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
+import { LiveXcpMeasurement } from "./features/measurements/LiveXcpMeasurement";
 import { signals, sample, Sparkline } from "./features/measurements/demoSignals";
 
 type Page = "Overview" | "Measurements" | "ELF Explorer" | "Calibration" | "Connections" | "Diagnostics";
@@ -196,14 +197,14 @@ function App() {
             </section>
           </div>
         </>}
-        {page === "Measurements" && <div className="measurement-layout">
+        {page === "Measurements" && <><LiveXcpMeasurement connected={sessionConnected} /><div className="measurement-layout">
           <section className="panel browser"><div className="panel-head"><div><h2>Signal browser</h2><p>{selected.length} selected</p></div></div><input className="search" placeholder="Search signals..." value={query} onChange={e => setQuery(e.target.value)} aria-label="Search signals" />
             <div className="signal-list">{visible.map(s => <label key={s.name} className="signal-option"><input type="checkbox" checked={selected.includes(s.name)} onChange={() => toggleSignal(s.name)} /><i style={{ background: s.color }} /><span>{s.name}<small>{s.unit}</small></span></label>)}{visible.length === 0 && <div className="empty">No matching signals.</div>}</div>
           </section>
           <section className="panel"><div className="panel-head"><div><h2>Live signals</h2><p>Generated locally · updates every 180 ms</p></div><div className="button-group"><button className="secondary" onClick={() => setRunning(r => !r)}>{running ? "Ⅱ Pause" : "▶ Resume"}</button><button className="primary" onClick={exportCsv} disabled={active.length === 0}>↓ Export CSV</button></div></div>
             <div className="signal-cards">{active.map(s => <div className="signal-card" key={s.name}><div className="signal-value"><span><i style={{ background: s.color }} />{s.name}</span><strong>{sample(s, tick).toFixed(s.precision)} <small>{s.unit}</small></strong></div><Sparkline signal={s} tick={tick} large /></div>)}{active.length === 0 && <div className="empty">Select a signal from the browser.</div>}</div>
           </section>
-        </div>}
+        </div></>}
         {page === "ELF Explorer" && <section className="panel">
           <div className="panel-head"><div><h2>ELF symbol explorer</h2><p>Inspect .symtab and .dynsym via the Rust backend</p></div><span className="demo-badge">LINK-TIME ADDRESSES</span></div>
           <div className="elf-toolbar"><label className="upload-button">↑ Choose ELF file<input type="file" accept=".elf,.axf,.out,.bin" onChange={e => void loadElf(e.target.files?.[0])} /></label>
