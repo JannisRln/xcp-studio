@@ -125,10 +125,10 @@ fn ignores_unrelated_can_frames() {
     }
     frames.push_back(CanFrame {
         id: ids.response,
-        data: vec![0xff, 0x01],
+        data: vec![0xff, 0x01, 0x00, 8, 8, 0, 1, 1],
     });
     let mut master = XcpMaster::new(NoisyTransport { frames }, ids);
-    assert_eq!(master.connect().unwrap(), vec![0x01]);
+    assert_eq!(master.connect().unwrap(), vec![0x01, 0x00, 8, 8, 0, 1, 1]);
 }
 
 #[test]
