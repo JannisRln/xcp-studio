@@ -38,7 +38,7 @@ describe("static GitHub Pages browser backend", () => {
     expect(active.sampling_mode).toBe("polling");
     expect(externalFetch).not.toHaveBeenCalled();
 
-    const Socket = windowMock.WebSocket as typeof WebSocket;
+    const Socket = windowMock.WebSocket as unknown as typeof WebSocket;
     const first = new Socket("wss://jannisrln.github.io/api/v1/acquisitions/" +
       active.acquisition_id + "/stream");
     const second = new Socket("wss://jannisrln.github.io/api/v1/acquisitions/" +
