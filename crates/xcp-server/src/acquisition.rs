@@ -196,7 +196,11 @@ impl AcquisitionRun {
             }
         }
         let guard = Subscription { run: Arc::clone(self) };
-        Ok((guard, self.tx.subscribe()))
+        let receiver = self.tx.subscribe();
+        if self.state.load(Ordering::Acquire) != RUNNING {
+            return Err(error(StatusCode::CONFLICT, "ACQUISITION_NOT_RUNNING", "acquisition stopped during subscription", false));
+        }
+        Ok((guard, receiver))
     }
 }
 
@@ -379,11 +383,9 @@ async fn send_events(
     mut receiver: broadcast::Receiver<AcquisitionEvent>,
 ) {
     let run = Arc::clone(&subscription.run);
-    let mut stop_rx = run.stop_tx.subscribe();
     let _guard = subscription;
     loop {
         tokio::select! {
-            biased;
             incoming = socket.recv() => {
                 match incoming {
                     Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
@@ -410,15 +412,7 @@ async fn send_events(
                 }
                 if terminal { break; }
             }
-            _ = stop_rx.changed() => {
-                // Prefer the terminal broadcast event while available.
-                if let Ok(event) = receiver.try_recv() {
-                    if let Ok(payload) = serde_json::to_string(&event) {
-                        let _ = socket.send(Message::Text(payload.into())).await;
-                    }
-                }
-                break;
-            }
+
         }
     }
     let _ = socket.close().await;
