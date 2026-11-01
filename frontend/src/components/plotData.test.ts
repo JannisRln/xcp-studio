@@ -34,9 +34,9 @@ describe("uPlot data alignment and decimation", () => {
     ];
     const [x,rpm,temp] = alignedPlotData(frames,signals);
     expect(x).toEqual([3,4]);
-    expect(Number.isNaN(rpm[0])).toBe(true);
+    expect(rpm[0]).toBeNull();
     expect(rpm[1]).toBe(30);
-    expect(temp.every(Number.isNaN)).toBe(true);
+    expect(temp).toEqual([null, null]);
   });
 
   it("produces cursor measurements and deltas from original frames", () => {
@@ -52,5 +52,46 @@ describe("uPlot data alignment and decimation", () => {
     expect(cursorValue([],signals[0],1000)).toBeNull();
     expect(cursorValue(frames,signals[0],null)).toBeNull();
     expect(() => alignedPlotData(frames,signals,2)).toThrow();
+  });
+  it("breaks uPlot lines at actual sequence/reattach gaps without inserting numeric samples", () => {
+    const frames: MeasurementFrame[] = [
+      { timestamp_ms: 100, sequence: 1, samples: [{name:"RPM", address:4096, value:100}] },
+      { timestamp_ms: 200, sequence: 6, samples: [{name:"RPM", address:4096, value:300}] },
+      { timestamp_ms: 300, sequence: 7, samples: [{name:"RPM", address:4096, value:400}] },
+    ];
+    const withGaps = frames.map((frame, index) => ({
+      ...frame, ...(index === 1 ? {gapBefore: 4} : {}),
+    }));
+    const [x, rpm] = alignedPlotData(withGaps, signals);
+    expect(x).toEqual([100, 150, 200, 300]);
+    expect(rpm).toEqual([100, null, 300, 400]);
+    expect(frames).toHaveLength(3);
+  });
+
+  it("keeps discontinuity nulls and spikes under a 20k+ frame draw budget", () => {
+    const frames = Array.from({length: 20001}, (_, i) => ({
+      timestamp_ms: i * 2,
+      sequence: i,
+      ...(i === 9900 || i === 15000 ? { gapBefore: i === 9900 ? 3 : 0 } : {}),
+      samples: [
+        { name:"RPM", address:4096, value:i===10000 ? 12000 : 1800 },
+        ...(i >= 16000 && i < 16100 ? [] : [{name:"Temp", address:4100, value:88.5}]),
+      ],
+    }));
+    const [x, rpm, temp] = alignedPlotData(frames, signals, 900);
+    expect(x.length).toBeLessThanOrEqual(900);
+    expect(rpm).toContain(12000);
+    expect(x).toContain(19799);
+    expect(x).toContain(29999);
+    expect(rpm[x.indexOf(19799)]).toBeNull();
+    expect(temp.some(value => value === null)).toBe(true);
+    expect(x.every((value, i) => i === 0 || value > x[i-1])).toBe(true);
+  });
+
+  it("never reports an invalid cursor value as a real reading", () => {
+    const frames = [
+      { timestamp_ms: 200, samples: [{name:"RPM",address:4096,value:Infinity}] },
+    ];
+    expect(cursorValue(frames, signals[0], 200)).toEqual({time:200,value:null});
   });
 });
