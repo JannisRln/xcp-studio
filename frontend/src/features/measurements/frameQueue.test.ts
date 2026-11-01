@@ -1,22 +1,34 @@
 import { describe, expect, it } from "vitest";
-import type { MeasurementFrame } from "../../core/api";
-import { enqueuePreviewFrame } from "./frameQueue";
+import { PreviewFrameQueue } from "./frameQueue";
 
-describe("bounded pending live preview queue", () => {
-  it("retains the latest frames during a stalled browser render", () => {
-    const queue: MeasurementFrame[] = [];
+describe("bounded WebSocket-to-React preview ring", () => {
+  it("keeps only the latest 2000 frames under a 10000-event burst", () => {
+    const queue = new PreviewFrameQueue(2000);
     for (let i = 0; i < 10000; i++)
-      enqueuePreviewFrame(queue, { timestamp_ms: i, sequence: i, samples: [] }, 2000);
-    expect(queue).toHaveLength(2000);
-    expect(queue[0].sequence).toBe(8000);
-    expect(queue[1999].sequence).toBe(9999);
+      queue.push({ timestamp_ms: i, sequence: i, samples: [] });
+    expect(queue.length).toBe(2000);
+    const batch = queue.drain();
+    expect(batch).toHaveLength(2000);
+    expect(batch[0].sequence).toBe(8000);
+    expect(batch[1999].sequence).toBe(9999);
+    expect(queue.length).toBe(0);
   });
 
-  it("rejects invalid capacities rather than silently growing forever", () => {
-    const queue: MeasurementFrame[] = [];
-    const frame = { timestamp_ms: 1, samples: [] };
-    expect(() => enqueuePreviewFrame(queue, frame, 0)).toThrow();
-    expect(() => enqueuePreviewFrame(queue, frame, NaN)).toThrow();
-    expect(queue).toHaveLength(0);
+  it("reuses the queue after drain and reset without retaining stale frames", () => {
+    const queue = new PreviewFrameQueue(2);
+    queue.push({ timestamp_ms: 1, samples: [] });
+    expect(queue.drain().map(frame => frame.timestamp_ms)).toEqual([1]);
+    queue.push({ timestamp_ms: 2, samples: [] });
+    queue.push({ timestamp_ms: 3, samples: [] });
+    queue.push({ timestamp_ms: 4, samples: [] });
+    expect(queue.drain().map(frame => frame.timestamp_ms)).toEqual([3, 4]);
+    queue.push({ timestamp_ms: 5, samples: [] });
+    queue.clear();
+    expect(queue.drain()).toEqual([]);
+  });
+
+  it("rejects invalid capacities", () => {
+    expect(() => new PreviewFrameQueue(0)).toThrow();
+    expect(() => new PreviewFrameQueue(NaN)).toThrow();
   });
 });
