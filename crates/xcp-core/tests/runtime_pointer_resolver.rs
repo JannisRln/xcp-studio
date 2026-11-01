@@ -330,13 +330,13 @@ fn rejects_missing_memory_bad_offsets_and_target_width_overflow() {
         ResolveError::NullPointer
     );
 
-    let mut node = node(4);
-    node.members[1].byte_offset = None;
+    let mut bad_node = node(4);
+    bad_node.members[1].byte_offset = None;
     memory.put_pointer(0x1020, 0x1200, 4, TargetEndian::Little);
     assert_eq!(
         solve(&mut memory, &variable(4), &target(4, TargetEndian::Little),
             &mapping(4, TargetEndian::Little),
-            &[PathStep::Dereference { pointee: &node }, PathStep::Member("value")])
+            &[PathStep::Dereference { pointee: &bad_node }, PathStep::Member("value")])
             .unwrap_err(),
         ResolveError::InvalidMember
     );
