@@ -233,3 +233,65 @@ select { width: auto; }
 @media(prefers-reduced-motion:reduce) {
   .live-hero--live .live-beacon { animation: none; }
 }
+
+/* GitHub Pages demo is visually distinct from real XCP transport. */
+.demo-notice { display: flex; align-items: center; gap: 13px; flex-wrap: wrap;
+  margin-bottom: 21px; padding: 13px 17px; border: 1px solid #99743d;
+  background: #3b2c1a; border-radius: 9px; color: #f4d49e; font-size: 12px; }
+.demo-notice strong { color: #ffe6b6; font-size: 11px; letter-spacing: .7px; }
+.demo-notice span { color: #f4d9b4; }
+
+/* uPlot takes over canvas drawing; no SVG paths are created for every sample. */
+.uplot-lanes { display: grid; gap: 12px; }
+.uplot-lane { min-width: 0; border: 1px solid #293e55; border-radius: 8px;
+  background: #101b2b; padding: 10px; }
+.uplot-lane-header { display: flex; gap: 15px; flex-wrap: wrap;
+  color: #cad9eb; margin: 3px 7px 8px; font-size: 12px; }
+.uplot-lane-header span { color: #859db8; }
+.uplot-host { width: 100%; min-height: 242px; min-width: 0; }
+.uplot-host .uplot { background: transparent; color: #d9e8fa; }
+.uplot-host .u-legend { font-size: 11px; width: 100%; color: #bdcde2; }
+.uplot-host .u-select { background: #589bdb3a; }
+.measurement-cursors { display: flex; gap: 9px; align-items: center; flex-wrap: wrap;
+  margin: 12px 0 15px; padding: 12px; background: #101b2a; border-radius: 8px; }
+.measurement-cursors > strong { margin-right: 9px; font-size: 11px; }
+.measurement-cursors label { font-size: 11px; color: #93a8c3; display: flex;
+  align-items: center; gap: 6px; }
+.measurement-cursors select { max-width: 170px; }
+.measurement-readout { display: flex; align-items: center; gap: 10px 25px;
+  flex-wrap: wrap; font-size: 12px; color: #abc1df; margin: 15px 0 5px; }
+.measurement-readout strong { color: #e9f5ff; font-variant-numeric: tabular-nums; }
+
+.live-window-section { min-width: 0; }
+.live-window-controls { display: flex; gap: 9px; align-items: center; flex-wrap: wrap;
+  margin-bottom: 9px; }
+.live-window-controls > strong { margin-right: 6px; color: #c8d9ed; font-size: 12px; }
+.live-window-controls > .muted { margin-right: auto; }
+.live-grid-container { min-width: 0; }
+.live-grid-container .react-grid-layout { min-width: 0; }
+.live-grid-container .react-grid-item { min-width: 0; }
+.live-window { overflow: hidden; height: 100%; display: flex; flex-direction: column;
+  border: 1px solid #334962; background: #121e30; border-radius: 10px; }
+.measure-window-handle { flex: 0 0 33px; cursor: grab; display: flex; gap: 10px;
+  align-items: center; padding: 0 14px; border-bottom: 1px solid #30425b;
+  background: #1a2c43; color: #a4c7e9; font-size: 10px; font-weight: 800;
+  letter-spacing: .8px; user-select: none; }
+.measure-window-handle:active { cursor: grabbing; }
+.window-drag-icon { font-size: 18px; line-height: 1; }
+.window-drag-hint { margin-left: auto; font-size: 9px; color: #7898b7;
+  letter-spacing: normal; font-weight: 500; }
+.live-window-body { flex: 1; min-height: 0; overflow: auto; }
+.live-window-body > .panel { min-height: 100%; border: none; border-radius: 0; }
+.live-window-body .plot-panel { min-height: 100%; }
+.live-window-body .value-grid { grid-template-columns: repeat(auto-fill,minmax(170px,1fr)); }
+.live-window-stack { display: grid; gap: 15px; }
+.live-window-stack .live-window { min-height: 330px; }
+.live-window-stack .live-window-body { overflow: visible; }
+.react-grid-item.react-grid-placeholder { background: #4b98d9 !important; opacity: .18; }
+.react-grid-item > .react-resizable-handle { width: 24px; height: 24px; }
+@media (max-width: 640px) {
+  .demo-notice { align-items: flex-start; }
+  .measurement-cursors { align-items: flex-start; }
+  .live-window-controls > .muted { width: 100%; order: 2; }
+  .window-drag-hint { display: none; }
+}
