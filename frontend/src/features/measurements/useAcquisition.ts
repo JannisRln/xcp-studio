@@ -6,8 +6,8 @@ import {
 } from "../../core/acquisitionV1";
 import { VersionedApiError } from "../../core/apiV1";
 import {
-  liveIndicator, measuredReceiveHz, recentReceiveTimes, reconnectDelayMs,
-  sampleAgeMs, skippedSequences,
+  freshnessLimitMs, liveIndicator, measuredReceiveHz, recentReceiveTimes,
+  reconnectDelayMs, sampleAgeMs, skippedSequences,
 } from "./liveTelemetry";
 
 export type AcquisitionState = "idle" | "connecting" | "streaming" | "error";
@@ -58,6 +58,8 @@ export function useAcquisition(connected: boolean) {
   const lastSequence = useRef<number | null>(null);
   const pendingDrops = useRef(0);
   const rateTimes = useRef<number[]>([]);
+  const lastReceivedAtRef = useRef<number | null>(null);
+  const connectionOpenedAt = useRef<number | null>(null);
   const requestVersion = useRef(0);
 
   const detach = useCallback(() => {
@@ -79,6 +81,8 @@ export function useAcquisition(connected: boolean) {
     lastSequence.current = null;
     pendingDrops.current = 0;
     rateTimes.current = [];
+    lastReceivedAtRef.current = null;
+    connectionOpenedAt.current = null;
     pausedRef.current = false;
     setPaused(false);
     setFrames([]);
@@ -103,6 +107,12 @@ export function useAcquisition(connected: boolean) {
 
     setState("connecting");
     setError("");
+    // A reattached socket has no proven new data until its first sample arrives.
+    lastReceivedAtRef.current = null;
+    connectionOpenedAt.current = performance.now();
+    rateTimes.current = [];
+    setLastReceivedAt(null);
+    setReceiveHz(0);
     let ws: WebSocket;
     try {
       ws = new WebSocket(acquisitionWsUrl(
@@ -118,6 +128,7 @@ export function useAcquisition(connected: boolean) {
 
     ws.onopen = () => {
       if (socket.current !== ws) return;
+      connectionOpenedAt.current = performance.now();
       setState("streaming");
       setRetryAttempt(0);
       setError("");
@@ -144,6 +155,7 @@ export function useAcquisition(connected: boolean) {
           const frame = eventFrame(event);
           frame.dropped_since_previous = missing;
           const now = performance.now();
+          lastReceivedAtRef.current = now;
           rateTimes.current = recentReceiveTimes(rateTimes.current, now);
           setReceiveHz(measuredReceiveHz(rateTimes.current));
           setLastReceivedAt(now);
@@ -229,6 +241,8 @@ export function useAcquisition(connected: boolean) {
       setState("idle");
       setError("");
       setLastReceivedAt(null);
+      lastReceivedAtRef.current = null;
+      connectionOpenedAt.current = null;
     }
     return () => {
       mounted.current = false;
@@ -244,16 +258,27 @@ export function useAcquisition(connected: boolean) {
     return () => window.clearTimeout(retry);
   }, [connected, state, status?.state, retryAttempt, reattach]);
 
+  // Also recover a socket that stays open but stops delivering samples.
+  // This is a VIEW watchdog; it never creates another backend acquisition.
   useEffect(() => {
-    if (state !== "streaming") return;
+    if (!connected || !status || status.state !== "running" ||
+        (state !== "streaming" && state !== "connecting")) return;
     const timer = window.setInterval(() => {
-      setObservedNow(performance.now());
-      // A rate estimate must decay to zero when samples stop arriving.
-      rateTimes.current = rateTimes.current.filter(t => performance.now() - t <= 5000);
+      const now = performance.now();
+      setObservedNow(now);
+      rateTimes.current = rateTimes.current.filter(time => now - time <= 5000);
       setReceiveHz(measuredReceiveHz(rateTimes.current));
+      const lastActivity = lastReceivedAtRef.current ?? connectionOpenedAt.current;
+      if (lastActivity !== null &&
+          now - lastActivity > freshnessLimitMs(status.interval_ms) * 2) {
+        detach();
+        setError("No recent XCP samples; reattaching to the existing acquisition.");
+        setState("error");
+        setRetryAttempt(count => count + 1);
+      }
     }, 500);
     return () => window.clearInterval(timer);
-  }, [state]);
+  }, [connected, state, status, detach]);
 
   const start = useCallback(async (signals: SignalDefinition[], intervalMs: number) => {
     if (!connected || !mounted.current) {
