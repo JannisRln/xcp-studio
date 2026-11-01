@@ -83,7 +83,7 @@ export type ProjectDocument = {
 export type ObservedEcuFile = Pick<EcuFileReference, "id" | "kind" | "sha256" | "sizeBytes">;
 
 export type ProjectWarning = {
-  code: "MIGRATED" | "MISSING_ECU_FILE" | "CHANGED_ECU_FILE";
+  code: "MIGRATED" | "UNVERIFIED_ECU_FILE" | "MISSING_ECU_FILE" | "CHANGED_ECU_FILE";
   fileId?: string;
   signalIds?: string[];
   message: string;
