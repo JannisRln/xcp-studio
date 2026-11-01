@@ -15,7 +15,13 @@ export const MAX_BUFFER = 2000;
 
 /** Bound the visualization preview without implying a complete recording. */
 export function appendFrame(previous: MeasurementFrame[], frame: MeasurementFrame): MeasurementFrame[] {
-  return [...previous.slice(-(MAX_BUFFER - 1)), frame];
+  return appendFrames(previous, [frame]);
+}
+
+/** One immutable preview commit per rendering budget, not per ECU sample. */
+export function appendFrames(previous: MeasurementFrame[], batch: MeasurementFrame[]): MeasurementFrame[] {
+  if (!batch.length) return previous;
+  return [...previous.slice(-MAX_BUFFER), ...batch].slice(-MAX_BUFFER);
 }
 
 export function eventFrame(event: AcquisitionSamplesEvent): MeasurementFrame {
@@ -61,8 +67,36 @@ export function useAcquisition(connected: boolean) {
   const lastReceivedAtRef = useRef<number | null>(null);
   const connectionOpenedAt = useRef<number | null>(null);
   const requestVersion = useRef(0);
+  const queuedFrames = useRef<MeasurementFrame[]>([]);
+  const latestFrameRef = useRef<MeasurementFrame | null>(null);
+  const batchTimer = useRef<number | null>(null);
+  const receivedRef = useRef(0);
+
+  const flushUi = useCallback(() => {
+    batchTimer.current = null;
+    const batch = queuedFrames.current;
+    queuedFrames.current = [];
+    if (batch.length) setFrames(previous => appendFrames(previous, batch));
+    setLatest(latestFrameRef.current);
+    setReceived(receivedRef.current);
+    setLastReceivedAt(lastReceivedAtRef.current);
+    setObservedNow(performance.now());
+    setReceiveHz(measuredReceiveHz(rateTimes.current));
+    const sequence = lastSequence.current;
+    if (sequence !== null) setStatus(previous => previous?.state === "running" &&
+      previous.sequence !== sequence ? { ...previous, sequence } : previous);
+  }, []);
+
+  const queueUi = useCallback(() => {
+    if (batchTimer.current === null)
+      batchTimer.current = window.setTimeout(flushUi, 80); // max 12.5 React chart updates/s
+  }, [flushUi]);
 
   const detach = useCallback(() => {
+    if (batchTimer.current !== null) {
+      window.clearTimeout(batchTimer.current);
+      flushUi();
+    }
     const previous = socket.current;
     socket.current = null;
     if (previous) {
@@ -73,7 +107,7 @@ export function useAcquisition(connected: boolean) {
       previous.onclose = null;
       previous.close();
     }
-  }, []);
+  }, [flushUi]);
 
   const resetForAcquisition = useCallback((id: string) => {
     if (activeId.current === id) return;
@@ -81,6 +115,13 @@ export function useAcquisition(connected: boolean) {
     lastSequence.current = null;
     pendingDrops.current = 0;
     rateTimes.current = [];
+    queuedFrames.current = [];
+    latestFrameRef.current = null;
+    receivedRef.current = 0;
+    if (batchTimer.current !== null) {
+      window.clearTimeout(batchTimer.current);
+      batchTimer.current = null;
+    }
     lastReceivedAtRef.current = null;
     connectionOpenedAt.current = null;
     pausedRef.current = false;
@@ -157,15 +198,10 @@ export function useAcquisition(connected: boolean) {
           const now = performance.now();
           lastReceivedAtRef.current = now;
           rateTimes.current = recentReceiveTimes(rateTimes.current, now);
-          setReceiveHz(measuredReceiveHz(rateTimes.current));
-          setLastReceivedAt(now);
-          setObservedNow(now);
-          setLatest(frame);
-          setReceived(count => count + 1);
-          setStatus(previous => previous?.acquisition_id === event.acquisition_id
-            ? { ...previous, sequence: event.sequence } : previous);
-          if (!pausedRef.current)
-            setFrames(previous => appendFrame(previous, frame));
+          latestFrameRef.current = frame;
+          receivedRef.current++;
+          if (!pausedRef.current) queuedFrames.current.push(frame);
+          queueUi();
         } else if (event.type === "gap") {
           pendingDrops.current += event.dropped;
           setDropped(count => count + event.dropped);
@@ -203,7 +239,7 @@ export function useAcquisition(connected: boolean) {
       setState("error");
       setRetryAttempt(count => count + 1);
     };
-  }, [detach, resetForAcquisition]);
+  }, [detach, resetForAcquisition, queueUi]);
 
   const reattach = useCallback(async () => {
     if (!mounted.current || !connected) return;
@@ -336,11 +372,18 @@ export function useAcquisition(connected: boolean) {
   }, []);
 
   const clear = useCallback(() => {
+    if (batchTimer.current !== null) {
+      window.clearTimeout(batchTimer.current);
+      batchTimer.current = null;
+    }
+    queuedFrames.current = [];
     setFrames([]);
+    receivedRef.current = 0;
     setReceived(0);
     setDropped(0);
     pendingDrops.current = 0;
     setLatest(null);
+    latestFrameRef.current = null;
   }, []);
 
   const sampleAge = sampleAgeMs(observedNow, lastReceivedAt);
