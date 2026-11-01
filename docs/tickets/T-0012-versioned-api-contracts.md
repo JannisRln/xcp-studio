@@ -1,11 +1,11 @@
 ---
 id: T-0012
 title: Versioned REST and WebSocket contracts with cross-language tests
-status: ready
+status: review
 priority: P0
 area: api
-owner: unassigned
-branch: none
+owner: api-contract-agent
+branch: feature/T-0012-quality-wire-contracts
 github_issue: 8
 depends_on: []
 requirements: [API-001, API-002, API-003, API-004, DIAG-001]
@@ -22,7 +22,7 @@ The baseline endpoints are unversioned. Merged PR #22 added an additive **v1 HTT
 ## Scope
 
 - [x] Define and test versioned **HTTP** success/error DTOs and shared fixtures; full WS design remains a documented target.
-- [ ] Define timestamp, integer precision, address provenance, quality/gap and error codes.
+- [x] Define timestamp, integer precision, address provenance, quality/gap and error codes (additive wire contract; producer/consumer review pending).
 - [x] Implement server-side runtime validation and TS boundary parsing for the new versioned health/session/read endpoints.
 - [x] Provide additive health/session/read routes with shared fixtures; legacy XCP endpoints retained for existing callers.
 - [x] Separate acquisition creation/stop REST controls from WebSocket subscription to a pre-existing acquisition ID, implemented in PR #25.
@@ -63,3 +63,14 @@ The baseline endpoints are unversioned. Merged PR #22 added an additive **v1 HTT
 - CI: green PR #25 [run #113](https://github.com/JannisRln/xcp-studio/actions/runs/41291388091) and PR #27 [run #115](https://github.com/JannisRln/xcp-studio/actions/runs/41291904365), plus original PR #22 green checks.
 - Tests: contracts/v1 JSON fixtures validated by Rust server tests and TypeScript Vitest tests; malformed/error payloads, subscriber gap and lifecycle validation covered.
 - Known limitations: shared v1 acquisition WS subscription exists; legacy unversioned per-client polling remains for compatibility. Rich raw/physical quality, exact 64-bit timing, recording and full error-family versioning remain unfinished. Complete under T-0005 and the remaining scope of T-0012.
+
+
+## Pending integration handoff — PR #37
+
+- Branch: `feature/T-0012-quality-wire-contracts`; [draft PR #37](https://github.com/JannisRln/xcp-studio/pull/37); owner: api-contract-agent.
+- Requirements: API-001/002/003/004, DIAG-001; also coordinated with MEAS-005/006/012.
+- Implements optional v1 sample quality/type/address and clock provenance fields, subscriber-only gap scope, structured validation-detail errors and shared success/negative JSON fixtures. No new HTTP/WS route. Old v1/unversioned payloads remain valid.
+- Tests: Rust unit fixture/invalid-enum/value width checks and frontend Vitest fixture/invalid-time/type/gap tests. **Local Rust toolchain unavailable; CI on current PR head must prove success before merge.**
+- Backend T-0005 and frontend T-0006 owner review requested via issue #8 and draft PR #37. Do not mark done or merge before approval and required CI.
+- Boundaries: simulator-only XCP polling; `quality: valid` means a finite successfully decoded read, not hardware clock or verified ECU address; no DAQ/replay/recorder/calibration or missing-value representation.
+- Rollback: revert PR #37; no legacy endpoint migration required.

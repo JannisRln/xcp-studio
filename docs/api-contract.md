@@ -160,6 +160,20 @@ Timestamp semantics: `timestamp_ms` is a **host wall-clock** observation after s
 
 **Limitations:** no ECU-side DAQ/event acquisition, no durable recorder, no quality metadata for individual samples, no replay/resume, no hardware timestamp synchronization. See T-0005/T-0015 and section 4 for the richer *target* contract.
 
+## 2.7 Additive v1 sample metadata and validation (T-0012 contract review)
+
+This is an additive extension to the **CURRENT** v1 acquisition wire model, not a new subscription route or ECU-side DAQ implementation. Earlier `samples` and `gap` messages without these fields remain valid and are retained as regression fixtures.
+
+- Sample batches can include `timestamp_origin: "host_utc_after_reads"` and `monotonic_clock: "acquisition_elapsed"`. Both are metadata identifying the clock used for the existing numeric millisecond fields; no synchronized ECU hardware timestamp is available. Measurements in a batch are read sequentially. The batch clock is sampled after the reads.
+- Individual samples can include `value_type` (u8/i8/u16/i16/u32/i32/f32/f64), `quality: "valid"` and `address_origin: "manual"`. `valid` means a successful finite decoded simulator memory read **only**. `manual` means a user-provided 32-bit raw address, not a verified ELF/A2L runtime mapping. Do not infer raw-to-physical conversion, freshness or simultaneity.
+- A `gap` may include `scope: "subscriber"`: `dropped` counts broadcast frames missed by that subscriber, never proven ECU-side sample loss. A failed read yields a terminal `status` event with `state:"failed",reason:"xcp_read_error"`; the backend does not invent null/NaN values.
+- Type checks: numeric values are finite, signed integer types are integral and within their declared ranges, and `address + width - 1` must fit u32. Frame counters and time fields must be nonnegative JS-safe integers. Unknown schema_version, sample value types, quality/origin enums and timing-origin enums are rejected at the TS boundary.
+- V1 structured errors continue to use code/message/request_id/retryable. An optional object `details` contains nonsensitive field-level validation hints; clients must not require it. Invalid JSON and unknown scalar enum types in acquisition creation are HTTP 400 `INVALID_JSON`; semantic rate/name/address validation is HTTP 422. There is no guarantee of nanosecond precision or exact 64-bit integers.
+
+Golden fixtures: `contracts/v1/acquisition-sample-qualified.json`, `acquisition-gap-scoped.json`, `acquisition-failed.json`, `error-validation.json` plus unchanged baseline fixtures. TS and Rust test the same JSON files.
+
+**Migration:** Old v1 and unversioned clients may ignore additive fields; new v1 consumers accept the old payloads. Existing /api/xcp/* and /api/v1/acquisitions/* paths, acquisition ownership, scheduler and control requests are unchanged. No guarantee is made for replay, ECU DAQ, per-signal missing/stale quality, precision-critical 64-bit values, or hardware timestamp synchronization; those need independent contracts and backend/frontend owner review. Until review and CI are green, this extension remains PR-only.
+
 ## 3. TARGET REST API v1 (design proposal; implemented subset identified below)
 
 Except for the three **CURRENT** endpoints in section 2.5, these target endpoints require implementing tickets and contract tests; names are tentative until API-001 is fully accepted.

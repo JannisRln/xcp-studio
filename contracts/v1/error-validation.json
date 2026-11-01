@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "error": {
+    "code": "INVALID_SAMPLE_INTERVAL",
+    "message": "interval_ms must be between 20 and 10000",
+    "request_id": "fixture-request-2",
+    "retryable": false,
+    "details": {
+      "field": "interval_ms",
+      "min": 20,
+      "max": 10000
+    }
+  }
+}

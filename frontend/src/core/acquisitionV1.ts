@@ -21,6 +21,13 @@ export type AcquisitionStatus = {
   error: string | null;
 };
 
+export type AcquisitionMeasurementSample = MeasurementSample & {
+  /** Optional v1 metadata; absent on older v1 producers. */
+  value_type?: SignalType;
+  quality?: "valid";
+  address_origin?: "manual";
+};
+
 export type AcquisitionSamplesEvent = {
   type: "samples";
   schema_version: 1;
@@ -29,7 +36,9 @@ export type AcquisitionSamplesEvent = {
   timestamp_ms: number;
   monotonic_elapsed_ms: number;
   dropped_since_previous: number;
-  samples: MeasurementSample[];
+  timestamp_origin?: "host_utc_after_reads";
+  monotonic_clock?: "acquisition_elapsed";
+  samples: AcquisitionMeasurementSample[];
 };
 
 export type AcquisitionGapEvent = {
@@ -37,6 +46,7 @@ export type AcquisitionGapEvent = {
   schema_version: 1;
   acquisition_id: string;
   dropped: number;
+  scope?: "subscriber";
 };
 
 export type AcquisitionTerminalEvent = {
@@ -60,17 +70,38 @@ function uint(value: unknown): value is number {
 }
 
 function identifier(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0 && value.length <= 128;
+  return typeof value === "string" && value.trim().length > 0 && new TextEncoder().encode(value).length <= 128;
+}
+
+const WIDTH: Record<SignalType, number> = { u8: 1, i8: 1, u16: 2, i16: 2, u32: 4, i32: 4, f32: 4, f64: 8 };
+
+function typedValue(value: number, type: SignalType): boolean {
+  if (type === "f32" || type === "f64") return Number.isFinite(value);
+  const ranges: Record<Exclude<SignalType, "f32" | "f64">, [number, number]> = {
+    u8: [0, 255], i8: [-128, 127], u16: [0, 65535], i16: [-32768, 32767],
+    u32: [0, 4294967295], i32: [-2147483648, 2147483647],
+  };
+  const [min, max] = ranges[type];
+  return Number.isSafeInteger(value) && value >= min && value <= max;
 }
 
 function signal(value: unknown): value is AcquisitionSignal {
   return object(value) && identifier(value.name) && uint(value.address) &&
-    value.address <= 0xffffffff && TYPES.includes(value.value_type as SignalType);
+    value.address <= 0xffffffff && TYPES.includes(value.value_type as SignalType) &&
+    value.address + WIDTH[value.value_type as SignalType] - 1 <= 0xffffffff;
 }
 
-function sample(value: unknown): value is MeasurementSample {
-  return object(value) && identifier(value.name) && uint(value.address) &&
-    value.address <= 0xffffffff && typeof value.value === "number" && Number.isFinite(value.value);
+function sample(value: unknown): value is AcquisitionMeasurementSample {
+  if (!object(value) || !identifier(value.name) || !uint(value.address) ||
+      value.address > 0xffffffff || typeof value.value !== "number" || !Number.isFinite(value.value)) return false;
+  if (value.quality !== undefined && value.quality !== "valid") return false;
+  if (value.address_origin !== undefined && value.address_origin !== "manual") return false;
+  if (value.value_type !== undefined) {
+    if (!TYPES.includes(value.value_type as SignalType)) return false;
+    const type = value.value_type as SignalType;
+    if (value.address + WIDTH[type] - 1 > 0xffffffff || !typedValue(value.value, type)) return false;
+  }
+  return true;
 }
 
 export function parseAcquisitionStatus(value: unknown): AcquisitionStatus {
@@ -96,18 +127,22 @@ export function parseAcquisitionEvent(value: unknown): AcquisitionEvent {
   if (value.type === "samples") {
     if (!uint(value.sequence) || !uint(value.timestamp_ms) ||
         !uint(value.monotonic_elapsed_ms) || !uint(value.dropped_since_previous) ||
+        (value.timestamp_origin !== undefined && value.timestamp_origin !== "host_utc_after_reads") ||
+        (value.monotonic_clock !== undefined && value.monotonic_clock !== "acquisition_elapsed") ||
         !Array.isArray(value.samples) || value.samples.length > 64 ||
         !value.samples.every((item: unknown) => sample(item)))
       throw new Error("Invalid XCP sample event");
     return value as unknown as AcquisitionSamplesEvent;
   }
   if (value.type === "gap") {
-    if (!uint(value.dropped) || value.dropped < 1) throw new Error("Invalid acquisition gap");
+    if (!uint(value.dropped) || value.dropped < 1 ||
+        (value.scope !== undefined && value.scope !== "subscriber")) throw new Error("Invalid acquisition gap");
     return value as unknown as AcquisitionGapEvent;
   }
   if (value.type === "status") {
     if (value.state !== "stopped" && value.state !== "failed") throw new Error("Invalid acquisition state");
-    if (typeof value.reason !== "string") throw new Error("Invalid acquisition reason");
+    if (value.reason !== "operator_stop" && value.reason !== "xcp_read_error")
+      throw new Error("Invalid acquisition reason");
     return value as unknown as AcquisitionTerminalEvent;
   }
   throw new Error("Unsupported acquisition event type");

@@ -21,6 +21,9 @@ pub struct ApiErrorDetails {
     pub message: String,
     pub request_id: String,
     pub retryable: bool,
+    /// Optional structured, non-sensitive validation diagnostics.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub details: Option<Box<serde_json::Map<String, serde_json::Value>>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -44,6 +47,7 @@ pub(crate) fn error(status: StatusCode, code: &str, message: impl Into<String>, 
                 message: message.into(),
                 request_id,
                 retryable,
+                details: None,
             },
         }),
     )
@@ -264,5 +268,18 @@ mod tests {
         .expect("error fixture");
         assert_eq!(failure.error.code, "XCP_SESSION_DISCONNECTED");
         assert_eq!(failure.schema_version, SCHEMA_VERSION);
+
+        let validation: ApiErrorEnvelope = serde_json::from_str(include_str!(
+            "../../../../contracts/v1/error-validation.json"
+        )).expect("structured validation fixture");
+        assert_eq!(validation.error.code, "INVALID_SAMPLE_INTERVAL");
+        assert_eq!(validation.error.details.as_ref().unwrap()["field"], "interval_ms");
+        let serialized = serde_json::to_value(validation).unwrap();
+        assert_eq!(serialized["error"]["details"]["min"], 20);
+        let unknown = serde_json::json!({"schema_version": 2, "error": {
+            "code": "INVALID_JSON", "message": "invalid", "request_id": "req-1", "retryable": false
+        }});
+        // The wire version is validated by the TypeScript boundary, not serde's u8 type.
+        assert_ne!(serde_json::from_value::<ApiErrorEnvelope>(unknown).unwrap().schema_version, SCHEMA_VERSION);
     }
 }

@@ -1,0 +1,7 @@
+{
+  "type": "status",
+  "schema_version": 1,
+  "acquisition_id": "acq-1",
+  "state": "failed",
+  "reason": "xcp_read_error"
+}
