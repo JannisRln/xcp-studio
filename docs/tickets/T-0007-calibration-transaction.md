@@ -68,7 +68,7 @@ Rust XCP master can write simulator memory, but no guarded public calibration tr
 
 ## Evidence and completion
 
-- Implementation PR / commit: `feature/T-0007-calibration-core` (draft PR to be linked after creation).
+- Implementation PR / commit: [Draft PR #50](https://github.com/JannisRln/xcp-studio/pull/50), branch `feature/T-0007-calibration-core`.
 - CI workflow/head SHA: pending.
 - Test/fixture evidence: `crates/xcp-core/src/calibration/mod.rs` (`#[cfg(test)]` mock cases); execution to be verified by CI, not claimed as passed locally.
 - Known limitations and follow-ups: no production write path; blocked session, integration and UI gates described above.
