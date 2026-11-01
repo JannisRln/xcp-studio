@@ -10,14 +10,14 @@
 | --- | --- | --- | --- | --- | --- |
 | T-0001 | [CI and quality gates](T-0001-ci-quality-gates.md) | P0 | blocked | — | [#4](https://github.com/JannisRln/xcp-studio/issues/4) |
 | T-0002 | [Modular frontend architecture](T-0002-frontend-architecture.md) | P0 | ready | — | [#5](https://github.com/JannisRln/xcp-studio/issues/5) |
-| T-0003 | [Typed ELF/DWARF](T-0003-typed-elf-dwarf.md) | P0 | review | — | [#6](https://github.com/JannisRln/xcp-studio/issues/6) |
-| T-0004 | [XCP session actor](T-0004-xcp-session-actor.md) | P0 | review | — | [#7](https://github.com/JannisRln/xcp-studio/issues/7) |
+| T-0003 | [Typed ELF/DWARF](T-0003-typed-elf-dwarf.md) | P0 | ready | — | [#6](https://github.com/JannisRln/xcp-studio/issues/6) |
+| T-0004 | [XCP session actor](T-0004-xcp-session-actor.md) | P0 | ready | — | [#7](https://github.com/JannisRln/xcp-studio/issues/7) |
 | T-0005 | [Shared acquisition + DAQ](T-0005-shared-acquisition.md) | P0 | blocked | T-0004, T-0012 | [#8](https://github.com/JannisRln/xcp-studio/issues/8) |
 | T-0006 | [Measurement charts and export](T-0006-measurement-workspace.md) | P0 | in-progress | T-0002, T-0005 | [#9](https://github.com/JannisRln/xcp-studio/issues/9) |
 | T-0007 | [Simulated calibration transaction](T-0007-calibration-transaction.md) | P0 | blocked | T-0003, T-0004, T-0013 | [#10](https://github.com/JannisRln/xcp-studio/issues/10) |
 | T-0011 | [Simulator E2E release acceptance](T-0011-simulator-e2e-release.md) | P0 | blocked | T-0005, T-0006, T-0007 | [#3](https://github.com/JannisRln/xcp-studio/issues/3) |
-| T-0012 | [Versioned API contracts](T-0012-versioned-api-contracts.md) | P0 | review | — | [#8](https://github.com/JannisRln/xcp-studio/issues/8) |
-| T-0013 | [Security and hardware-write safety](T-0013-security-safety-policy.md) | P0 | review | — | [#10](https://github.com/JannisRln/xcp-studio/issues/10) |
+| T-0012 | [Versioned API contracts](T-0012-versioned-api-contracts.md) | P0 | blocked | — | [#8](https://github.com/JannisRln/xcp-studio/issues/8) |
+| T-0013 | [Security and hardware-write safety](T-0013-security-safety-policy.md) | P0 | ready | — | [#10](https://github.com/JannisRln/xcp-studio/issues/10) |
 | T-0014 | [Runtime pointer resolution](T-0014-runtime-pointer-resolution.md) | P0 | blocked | T-0003, T-0004 | [#6](https://github.com/JannisRln/xcp-studio/issues/6) |
 
 ## P1 / integration and persistence
@@ -45,6 +45,8 @@
 | 3 | Measurement visualization and backend recorder | T-0006, T-0015 | Consume frozen acquisition schema |
 | 3 | Calibration and diagnostics | T-0007, T-0016 | Coordinate audit/event schema and shared session |
 | 4 | End-to-end release acceptance | T-0011 | Integrate only green, merged feature PRs |
+
+**Integration reconciliation (2026-11-01):** PRs #39/#40/#42/#43/#45/#46 were squash-merged, and `main` CI [41324320683](https://github.com/JannisRln/xcp-studio/actions/runs/41324320683) passed. T-0003/T-0004/T-0013 are READY for remaining acceptance/implementation, not DONE; merged PR #46 leaves T-0012 BLOCKED for explicit independent T-0005/T-0006 owner contract sign-off. T-0006 remains in progress with separately coordinated follow-up work; do not overwrite new claims. The default branch reports `protected: false` and repository ruleset list is empty, so T-0001 stays BLOCKED until an administrator enables and verifies enforcement. See [integration review](../integration-review-2026-11-01.md).
 
 **Merge discipline:** one branch/owner per ticket; cross-module schema change via T-0012; dependencies must be confirmed DONE unless a narrowly scoped independent phase is documented in the ticket. A BLOCKED item is not automatically assignable. Green CI is necessary but not sufficient for acceptance.
 
