@@ -11,6 +11,10 @@ describe("shared acquisition buffer and timebase", () => {
     if (event.type !== "samples") return;
     expect(eventFrame(event)).toEqual({
       timestamp_ms: 1761980000000,
+      acquisition_id: "acq-1",
+      sequence: 1,
+      monotonic_elapsed_ms: 20,
+      dropped_since_previous: 0,
       samples: [
         { name: "Engine speed", address: 4096, value: 1850 },
         { name: "Coolant", address: 4100, value: 88.5 },
