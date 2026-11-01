@@ -30,10 +30,10 @@ pub struct ApiErrorEnvelope {
     pub error: ApiErrorDetails,
 }
 
-type ApiFailure = (StatusCode, Json<ApiErrorEnvelope>);
+pub(crate) type ApiFailure = (StatusCode, Json<ApiErrorEnvelope>);
 type ApiResult<T> = Result<Json<T>, ApiFailure>;
 
-fn error(status: StatusCode, code: &str, message: impl Into<String>, retryable: bool) -> ApiFailure {
+pub(crate) fn error(status: StatusCode, code: &str, message: impl Into<String>, retryable: bool) -> ApiFailure {
     let request_id = format!("request-{}", REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed));
     (
         status,
