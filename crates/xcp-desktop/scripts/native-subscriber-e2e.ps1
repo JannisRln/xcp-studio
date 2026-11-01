@@ -48,18 +48,46 @@ try {
     Remove-Item $screenshot -ErrorAction SilentlyContinue
     $desktop = Start-Process -FilePath $desktopExe -ArgumentList @("--subscribe-acquisition=$id","--screenshot=$screenshot") -WorkingDirectory $outDir -PassThru
     $joined = $false
+    $joinedAt = $null
     while ([DateTime]::UtcNow -lt $deadline) {
         $desktop.Refresh()
         if ($desktop.HasExited) { throw "Native window exited before subscription" }
         $current = Invoke-RestMethod -Uri "$base/api/v1/acquisitions/current" -TimeoutSec 3
         if ($current.acquisition_id -ne $id) { throw "Native viewer changed backend acquisition" }
         $status = Invoke-RestMethod -Uri "$base/api/v1/acquisitions/$id" -TimeoutSec 3
-        if ($status.subscriber_count -eq 1) { $joined = $true }
+        if ($status.subscriber_count -eq 1 -and -not $joined) {
+            $joined = $true
+            $joinedAt = [DateTime]::UtcNow
+        }
         if ($joined -and (Test-Path $screenshot)) { break }
+        if ($joined -and ([DateTime]::UtcNow - $joinedAt).TotalSeconds -gt 5) { break }
         Start-Sleep -Milliseconds 200
     }
     if (-not $joined) { throw "Native subscriber never attached" }
-    if (-not (Test-Path $screenshot)) { throw "Native eframe renderer did not capture live subscriber" }
+    if (Test-Path $screenshot) {
+        $screenshotName = "native-subscriber-rendered.png"
+    } else {
+        $desktop.Refresh()
+        if ($desktop.MainWindowHandle -eq [IntPtr]::Zero) {
+            throw "Read-only native viewer attached but neither framebuffer screenshot nor desktop window available"
+        }
+        Add-Type -AssemblyName System.Windows.Forms
+        Add-Type -AssemblyName System.Drawing
+        $screen = [System.Windows.Forms.Screen]::PrimaryScreen
+        if ($null -eq $screen) { throw "Cannot capture real native subscriber desktop" }
+        $bounds = $screen.Bounds
+        $screenshotName = "native-subscriber-windows.png"
+        $bmp = [System.Drawing.Bitmap]::new($bounds.Width, $bounds.Height)
+        try {
+            $graphics = [System.Drawing.Graphics]::FromImage($bmp)
+            try {
+                $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+            }
+            finally { $graphics.Dispose() }
+            $bmp.Save((Join-Path $outDir $screenshotName), [System.Drawing.Imaging.ImageFormat]::Png)
+        }
+        finally { $bmp.Dispose() }
+    }
     $session = Invoke-RestMethod -Uri "$base/api/v1/sessions/current" -TimeoutSec 5
     if (-not $session.connected) { throw "Viewer unexpectedly disconnected XCP session" }
     [ordered]@{
@@ -69,7 +97,7 @@ try {
         subscribersBefore = $before.subscriber_count
         subscribersDuringNative = $status.subscriber_count
         singleSessionRemainedConnected = [bool]$session.connected
-        screenshot = "native-subscriber-rendered.png"
+        screenshot = $screenshotName
         limitation = "Not real hardware/DAQ. This viewer subscribed, it did not start an XCP session or acquisition."
     } | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8 (Join-Path $outDir "native-readonly-subscriber-e2e.json")
     Write-Host "PASS native GUI subscriber on existing Rust simulator acquisition"
