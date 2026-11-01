@@ -3,6 +3,9 @@ import sampleFixture from "../../../contracts/v1/acquisition-sample.json";
 import gapFixture from "../../../contracts/v1/acquisition-gap.json";
 import statusFixture from "../../../contracts/v1/acquisition-status.json";
 import errorFixture from "../../../contracts/v1/error-disconnected.json";
+import qualifiedFixture from "../../../contracts/v1/acquisition-sample-qualified.json";
+import scopedGapFixture from "../../../contracts/v1/acquisition-gap-scoped.json";
+import failedFixture from "../../../contracts/v1/acquisition-failed.json";
 import {
   acquisitionApi, acquisitionWsUrl, parseAcquisitionEvent,
   parseAcquisitionStatus,
@@ -21,6 +24,15 @@ describe("shared acquisition API wire fixtures", () => {
       expect(sample.monotonic_elapsed_ms).toBe(20);
     }
     expect(parseAcquisitionEvent(gapFixture)).toMatchObject({ type: "gap", dropped: 11 });
+    expect(parseAcquisitionEvent(scopedGapFixture)).toMatchObject({ type: "gap", scope: "subscriber", dropped: 11 });
+    expect(parseAcquisitionEvent(failedFixture)).toMatchObject({ type: "status", state: "failed" });
+    const qualified = parseAcquisitionEvent(qualifiedFixture);
+    expect(qualified.type).toBe("samples");
+    if (qualified.type === "samples") {
+      expect(qualified.timestamp_origin).toBe("host_utc_after_reads");
+      expect(qualified.monotonic_clock).toBe("acquisition_elapsed");
+      expect(qualified.samples[0]).toMatchObject({ value_type: "u32", quality: "valid", address_origin: "manual" });
+    }
     expect(parseAcquisitionStatus(statusFixture)).toMatchObject({
       acquisition_id: "acq-1", state: "running", interval_ms: 100, subscriber_count: 2,
     });
@@ -35,6 +47,19 @@ describe("shared acquisition API wire fixtures", () => {
       { ...sampleFixture, samples: [{ name: "rpm", address: 4096, value: Number.NaN }] },
       { ...gapFixture, dropped: 0 },
       { ...gapFixture, type: "unknown" },
+      { ...scopedGapFixture, scope: "global" },
+      { ...failedFixture, reason: "unknown_reason" },
+      { ...qualifiedFixture, timestamp_origin: "ecu" },
+      { ...qualifiedFixture, monotonic_clock: "wall-clock" },
+      { ...qualifiedFixture, samples: [{ ...qualifiedFixture.samples[0], quality: "invalid" }] },
+      { ...qualifiedFixture, samples: [{ ...qualifiedFixture.samples[0], address_origin: "elf_verified" }] },
+      { ...qualifiedFixture, samples: [{ ...qualifiedFixture.samples[0], value_type: "u64" }] },
+      { ...qualifiedFixture, samples: [{ ...qualifiedFixture.samples[0], value_type: "u8", value: 1850 }] },
+      { ...qualifiedFixture, samples: [{ ...qualifiedFixture.samples[0], value_type: "i8", value: -129 }] },
+      { ...qualifiedFixture, samples: [{ ...qualifiedFixture.samples[0], value_type: "i16", value: 1.5 }] },
+      { ...qualifiedFixture, samples: [{ ...qualifiedFixture.samples[0], value_type: "f64", address: 0xffffffff }] },
+      { ...qualifiedFixture, samples: [{ ...qualifiedFixture.samples[0], name: " " }] },
+      { ...qualifiedFixture, samples: [{ ...qualifiedFixture.samples[0], name: "Ä".repeat(65) }] },
     ]) expect(() => parseAcquisitionEvent(value)).toThrow();
   });
 
@@ -67,6 +92,9 @@ describe("shared acquisition API wire fixtures", () => {
   it("does not send malformed acquisition configuration", () => {
     expect(() => acquisitionApi.create(1, statusFixture.signals as never)).toThrow();
     expect(() => acquisitionApi.create(100, [])).toThrow();
+    expect(() => acquisitionApi.create(100, [
+      { name: "bad", address: 0xffffffff, value_type: "f64" },
+    ])).toThrow();
     expect(() => acquisitionApi.create(100, [
       { name: "rpm", address: 4096, value_type: "u32" },
       { name: "rpm", address: 4100, value_type: "f32" },

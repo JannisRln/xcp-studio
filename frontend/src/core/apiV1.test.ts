@@ -3,6 +3,7 @@ import healthFixture from "../../../contracts/v1/health.json";
 import sessionFixture from "../../../contracts/v1/session.json";
 import readFixture from "../../../contracts/v1/read.json";
 import errorFixture from "../../../contracts/v1/error-disconnected.json";
+import validationFixture from "../../../contracts/v1/error-validation.json";
 import {
   apiV1, parseHealthV1, parseReadV1, parseSessionV1, parseErrorV1,
   VersionedApiError,
@@ -16,6 +17,7 @@ describe("shared REST v1 fixtures", () => {
     expect(parseSessionV1(sessionFixture).connected).toBe(true);
     expect(parseReadV1(readFixture).bytes).toEqual([58, 7, 0, 0]);
     expect(parseErrorV1(errorFixture).error.code).toBe("XCP_SESSION_DISCONNECTED");
+    expect(parseErrorV1(validationFixture).error.details?.field).toBe("interval_ms");
   });
 
   it("rejects malformed, unknown-version and precision-loss values", () => {
@@ -25,6 +27,8 @@ describe("shared REST v1 fixtures", () => {
     expect(() => parseReadV1({ ...readFixture, bytes: [256] })).toThrow();
     expect(() => parseReadV1({ ...readFixture, bytes: [58, 7, 0, 0], hex: "00" })).toThrow();
     expect(() => parseErrorV1({ schema_version: 1, error: { code: "ERR" } })).toThrow();
+    expect(() => parseErrorV1({ ...validationFixture, error: { ...validationFixture.error, details: [] } })).toThrow();
+    expect(() => parseErrorV1({ ...validationFixture, error: { ...validationFixture.error, code: "unknown-enum" } })).toThrow();
   });
 
   it("validates input before sending a read", () => {

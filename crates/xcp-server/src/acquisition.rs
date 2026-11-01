@@ -7,7 +7,7 @@
 use crate::api::v1::{error, ApiFailure};
 use crate::security;
 use crate::{
-    session_snapshot, Session, SnapshotRequest, SnapshotSample, SnapshotSignalRequest,
+    session_snapshot, Session, SnapshotRequest, SnapshotSignalRequest,
 };
 use axum::{
     extract::{
@@ -32,7 +32,6 @@ use tokio::{
     time::{interval, timeout, Duration, Instant, MissedTickBehavior},
 };
 use xcp_core::session::SessionState;
-#[cfg(test)]
 use crate::SnapshotValueType;
 
 const RUNNING: u8 = 1;
@@ -107,6 +106,56 @@ pub struct AcquisitionStatus {
     pub error: Option<String>,
 }
 
+/// Finite values obtained from one successful sequential simulator read.
+/// Valid does not imply a simultaneous ECU timestamp or a verified address.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SampleQuality { Valid }
+
+/// The v1 acquisition accepts manually configured raw ECU addresses.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AddressOrigin { Manual }
+
+/// Additive metadata is optional to preserve pre-extension v1 JSON fixtures.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AcquisitionSampleV1 {
+    pub name: String,
+    pub address: u32,
+    pub value: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value_type: Option<crate::SnapshotValueType>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quality: Option<SampleQuality>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub address_origin: Option<AddressOrigin>,
+}
+
+impl AcquisitionSampleV1 {
+    /// Validate the wire value against its optional raw scalar type.
+    /// Future nullable/missing samples require a separately reviewed contract.
+    fn validate(&self) -> Result<(), &'static str> {
+        if self.name.trim().is_empty() || self.name.len() > 128 || !self.value.is_finite() {
+            return Err("invalid sample name or non-finite value");
+        }
+        let Some(kind) = &self.value_type else { return Ok(()); };
+        if self.address.checked_add(kind.byte_count() as u32 - 1).is_none() {
+            return Err("sample width exceeds 32-bit address space");
+        }
+        let valid = match kind {
+            SnapshotValueType::U8 => self.value.fract() == 0.0 && (0.0..=255.0).contains(&self.value),
+            SnapshotValueType::I8 => self.value.fract() == 0.0 && (-128.0..=127.0).contains(&self.value),
+            SnapshotValueType::U16 => self.value.fract() == 0.0 && (0.0..=65535.0).contains(&self.value),
+            SnapshotValueType::I16 => self.value.fract() == 0.0 && (-32768.0..=32767.0).contains(&self.value),
+            SnapshotValueType::U32 => self.value.fract() == 0.0 && (0.0..=4294967295.0).contains(&self.value),
+            SnapshotValueType::I32 => self.value.fract() == 0.0 && (-2147483648.0..=2147483647.0).contains(&self.value),
+            SnapshotValueType::F32 | SnapshotValueType::F64 => true,
+        };
+        if valid { Ok(()) } else { Err("value exceeds declared scalar type range") }
+    }
+}
+
 #[derive(Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AcquisitionEvent {
@@ -117,12 +166,18 @@ pub enum AcquisitionEvent {
         timestamp_ms: u128,
         monotonic_elapsed_ms: u64,
         dropped_since_previous: u64,
-        samples: Vec<SnapshotSample>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        timestamp_origin: Option<&'static str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        monotonic_clock: Option<&'static str>,
+        samples: Vec<AcquisitionSampleV1>,
     },
     Gap {
         schema_version: u8,
         acquisition_id: String,
         dropped: u64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        scope: Option<&'static str>,
     },
     Status {
         schema_version: u8,
@@ -305,7 +360,16 @@ async fn acquire(run: Arc<AcquisitionRun>, session: Session, mut stop_rx: watch:
                             timestamp_ms: snapshot.timestamp_ms,
                             monotonic_elapsed_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
                             dropped_since_previous: 0,
-                            samples: snapshot.samples,
+                            timestamp_origin: Some("host_utc_after_reads"),
+                            monotonic_clock: Some("acquisition_elapsed"),
+                            samples: snapshot.samples.into_iter().zip(run.config.signals.iter()).map(|(sample, signal)| AcquisitionSampleV1 {
+                                name: sample.name,
+                                address: sample.address,
+                                value: sample.value,
+                                value_type: Some(signal.value_type.clone()),
+                                quality: Some(SampleQuality::Valid),
+                                address_origin: Some(AddressOrigin::Manual),
+                            }).inspect(|sample| debug_assert!(sample.validate().is_ok())).collect(),
                         };
                         // Broadcast send never waits for a slow client. Lagged receivers
                         // observe a gap and account the dropped frames independently.
@@ -421,6 +485,7 @@ async fn send_events(
                             schema_version: 1,
                             acquisition_id: run.id.clone(),
                             dropped,
+                            scope: Some("subscriber"),
                         }
                     }
                     Err(broadcast::error::RecvError::Closed) => break,
@@ -479,16 +544,24 @@ mod tests {
             timestamp_ms: 1761980000000,
             monotonic_elapsed_ms: 20,
             dropped_since_previous: 0,
+            timestamp_origin: None,
+            monotonic_clock: None,
             samples: vec![
-                SnapshotSample {
+                AcquisitionSampleV1 {
                     name: "Engine speed".into(),
                     address: 4096,
                     value: 1850.0,
+                    value_type: None,
+                    quality: None,
+                    address_origin: None,
                 },
-                SnapshotSample {
+                AcquisitionSampleV1 {
                     name: "Coolant".into(),
                     address: 4100,
                     value: 88.5,
+                    value_type: None,
+                    quality: None,
+                    address_origin: None,
                 },
             ],
         };
@@ -501,11 +574,87 @@ mod tests {
             schema_version: 1,
             acquisition_id: "acq-1".into(),
             dropped: 11,
+            scope: None,
         };
         let expected: serde_json::Value = serde_json::from_str(include_str!(
             "../../../contracts/v1/acquisition-gap.json"
         )).unwrap();
         assert_eq!(serde_json::to_value(gap).unwrap(), expected);
+        let scoped = AcquisitionEvent::Gap {
+            schema_version: 1, acquisition_id: "acq-1".into(), dropped: 11,
+            scope: Some("subscriber"),
+        };
+        let expected: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../contracts/v1/acquisition-gap-scoped.json"
+        )).unwrap();
+        assert_eq!(serde_json::to_value(scoped).unwrap(), expected);
+        let failed = AcquisitionEvent::Status {
+            schema_version: 1, acquisition_id: "acq-1".into(),
+            state: "failed", reason: "xcp_read_error",
+        };
+        let expected: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../contracts/v1/acquisition-failed.json"
+        )).unwrap();
+        assert_eq!(serde_json::to_value(failed).unwrap(), expected);
+
+        let enriched: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../contracts/v1/acquisition-sample-qualified.json"
+        )).unwrap();
+        let encoded = serde_json::to_value(AcquisitionEvent::Samples {
+            schema_version: 1,
+            acquisition_id: "acq-1".into(),
+            sequence: 1,
+            timestamp_ms: 1761980000000,
+            monotonic_elapsed_ms: 20,
+            dropped_since_previous: 0,
+            timestamp_origin: Some("host_utc_after_reads"),
+            monotonic_clock: Some("acquisition_elapsed"),
+            samples: vec![AcquisitionSampleV1 {
+                name: "Engine speed".into(), address: 4096, value: 1850.0,
+                value_type: Some(SnapshotValueType::U32), quality: Some(SampleQuality::Valid),
+                address_origin: Some(AddressOrigin::Manual),
+            }],
+        }).unwrap();
+        assert_eq!(encoded, enriched);
+        let decoded: AcquisitionSampleV1 = serde_json::from_value(enriched["samples"][0].clone()).unwrap();
+        assert!(matches!(decoded.quality, Some(SampleQuality::Valid)));
+        assert!(decoded.validate().is_ok());
+        for (kind, value) in [
+            (SnapshotValueType::U8, 256.0),
+            (SnapshotValueType::I8, -129.0),
+            (SnapshotValueType::U16, -1.0),
+            (SnapshotValueType::I16, 32768.0),
+            (SnapshotValueType::U32, 4294967296.0),
+            (SnapshotValueType::I32, 1.25),
+        ] {
+            let wrong = AcquisitionSampleV1 { value_type: Some(kind), value, ..decoded.clone() };
+            assert!(wrong.validate().is_err());
+        }
+        let overflow = AcquisitionSampleV1 {
+            address: u32::MAX, value_type: Some(SnapshotValueType::F64), ..decoded.clone()
+        };
+        assert!(overflow.validate().is_err());
+        for invalid in [
+            serde_json::json!({"name":"rpm","address":4096,"value":1850,"quality":"unknown"}),
+            serde_json::json!({"name":"rpm","address":4096,"value":1850,"value_type":"u64"}),
+            serde_json::json!({"name":"rpm","address":4096,"value":1850,"address_origin":"elf_verified"}),
+            serde_json::json!({"name":"rpm","address":4294967296_u64,"value":1850}),
+        ] { assert!(serde_json::from_value::<AcquisitionSampleV1>(invalid).is_err()); }
+    }
+
+    #[test]
+    fn rejects_unknown_and_malformed_acquisition_request_types() {
+        for invalid in [
+            r#"{"interval_ms":100,"signals":[{"name":"rpm","address":4096,"value_type":"u64"}]}"#,
+            r#"{"interval_ms":"100","signals":[{"name":"rpm","address":4096,"value_type":"u32"}]}"#,
+            r#"{"interval_ms":100,"signals":[{"name":"rpm","address":4294967296,"value_type":"u32"}]}"#,
+            r#"{"interval_ms":100,"signals":[],"unexpected":true}"#,
+        ] {
+            assert!(serde_json::from_str::<AcquisitionConfig>(invalid).is_err());
+        }
+        assert!(serde_json::from_str::<AcquisitionConfig>(
+            r#"{"interval_ms":100,"signals":[{"name":"rpm","address":4096,"value_type":"u32"}]}"#
+        ).unwrap().validate().is_ok());
     }
 
     #[test]
@@ -542,6 +691,10 @@ mod tests {
         assert_eq!(sa, sb);
         assert_eq!(samples[0].value, 1850.0);
         assert_eq!(samples[1].value, 88.5);
+        assert!(matches!(samples[0].quality, Some(SampleQuality::Valid)));
+        assert!(matches!(samples[0].address_origin, Some(AddressOrigin::Manual)));
+        assert!(matches!(samples[0].value_type.as_ref(), Some(SnapshotValueType::U32)));
+        assert!(samples.iter().all(|sample| sample.validate().is_ok()));
         assert_eq!(run.status().subscriber_count, 2);
         assert_eq!(run.status().sampling_mode, "polling");
         run.stop();
@@ -566,6 +719,8 @@ mod tests {
                 timestamp_ms: 0,
                 monotonic_elapsed_ms: 0,
                 dropped_since_previous: 0,
+                timestamp_origin: None,
+                monotonic_clock: None,
                 samples: vec![],
             });
         }

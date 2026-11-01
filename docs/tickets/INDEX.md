@@ -16,7 +16,7 @@
 | T-0006 | [Measurement charts and export](T-0006-measurement-workspace.md) | P0 | in-progress | T-0002, T-0005 | [#9](https://github.com/JannisRln/xcp-studio/issues/9) |
 | T-0007 | [Simulated calibration transaction](T-0007-calibration-transaction.md) | P0 | blocked | T-0003, T-0004, T-0013 | [#10](https://github.com/JannisRln/xcp-studio/issues/10) |
 | T-0011 | [Simulator E2E release acceptance](T-0011-simulator-e2e-release.md) | P0 | blocked | T-0005, T-0006, T-0007 | [#3](https://github.com/JannisRln/xcp-studio/issues/3) |
-| T-0012 | [Versioned API contracts](T-0012-versioned-api-contracts.md) | P0 | ready | — | [#8](https://github.com/JannisRln/xcp-studio/issues/8) |
+| T-0012 | [Versioned API contracts](T-0012-versioned-api-contracts.md) | P0 | review | — | [#8](https://github.com/JannisRln/xcp-studio/issues/8) |
 | T-0013 | [Security and hardware-write safety](T-0013-security-safety-policy.md) | P0 | review | — | [#10](https://github.com/JannisRln/xcp-studio/issues/10) |
 | T-0014 | [Runtime pointer resolution](T-0014-runtime-pointer-resolution.md) | P0 | blocked | T-0003, T-0004 | [#6](https://github.com/JannisRln/xcp-studio/issues/6) |
 
