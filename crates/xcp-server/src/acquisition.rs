@@ -390,7 +390,9 @@ pub async fn subscribe(
 ) -> Result<impl IntoResponse, ApiFailure> {
     let run = service.current(&id)?;
     let (guard, receiver) = run.subscribe()?;
-    Ok(ws.on_upgrade(move |socket| send_events(socket, guard, receiver)))
+    Ok(ws.max_message_size(16 * 1024)
+        .max_frame_size(16 * 1024)
+        .on_upgrade(move |socket| send_events(socket, guard, receiver)))
 }
 
 async fn send_events(

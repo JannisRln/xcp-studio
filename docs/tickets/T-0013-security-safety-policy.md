@@ -1,11 +1,11 @@
 ---
 id: T-0013
 title: Local API security and guarded hardware safety policy
-status: ready
+status: in-progress
 priority: P0
 area: safety
-owner: unassigned
-branch: none
+owner: assistant-security-agent
+branch: feat/T-0013-local-api-guard
 github_issue: 10
 depends_on: []
 requirements: [SEC-001, SEC-002, SEC-003, SEC-005, CAL-006, CAL-007]
@@ -15,14 +15,14 @@ requirements: [SEC-001, SEC-002, SEC-003, SEC-005, CAL-006, CAL-007]
 
 ## Context / desired behavior
 
-The API binds to loopback, but a comprehensive remote exposure policy, WebSocket limits, resource caps and hardware write gating are not implemented.
+The API already binds to loopback. This incremental PR enforces strict loopback Host headers, approved local browser Origin/Fetch Metadata for HTTP and WebSocket, plus 16-KiB WebSocket message/frame limits. It is **not authentication** and does not enable remote access or hardware writes. Remaining per-session rate/connection limits and write gating are tracked in this ticket.
 
 **Desired outcome:** Local API security and guarded hardware safety policy. Implement according to [product specification](../product-specification.md), [architecture](../architecture.md) and [API contract](../api-contract.md), where applicable.
 
 ## Scope
 
-- [ ] Threat-model loopback/remote access, credentials, WebSocket origin, file uploads and ECU write operations.
-- [ ] Enforce bounded upload/WS/frame/session/rate limits and clear rejection semantics.
+- [x] Document browser cross-origin/CSRF, WebSocket origin and DNS-rebinding risks on the loopback API; full threat-model scope remains open.
+- [x] Enforce loopback Host/approved Origin, reject cross-site browser fetches, and cap legacy/shared WS messages/frames to 16 KiB; request-rate and total connection caps remain unimplemented.
 - [ ] Define default read-only hardware policy, operator confirmation and safe write capability selection.
 - [ ] Implement redaction rules for logs and bugreport bundles.
 - [ ] Document loss-of-response and rollback limitations without implying ECU data unchanged.
@@ -59,7 +59,7 @@ The API binds to loopback, but a comprehensive remote exposure policy, WebSocket
 
 ## Evidence and completion
 
-- Implementation PR / commit: pending.
+- Implementation PR: local HTTP/WebSocket origin and Host guard (CI/review pending).
 - CI workflow/head SHA: pending.
 - Test/fixture evidence: pending.
-- Known limitations and follow-ups: pending.
+- Known limitations: no remote authentication/authorization/TLS, no per-client request rate limits, no validated hardware write enablement, no log redaction; T-0013 remains in-progress.

@@ -1,3 +1,4 @@
+mod security;
 mod acquisition;
 mod api;
 
@@ -5,7 +6,7 @@ use axum::{
     extract::{ws::{Message, WebSocket, WebSocketUpgrade}, DefaultBodyLimit, Extension, State},
     http::StatusCode,
     routing::{get, post},
-    Json, Router,
+    middleware, Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use xcp_core::session::{SessionActor, SessionError, SessionHandle, SessionState};
@@ -286,7 +287,9 @@ async fn stream_upgrade(
     ws: WebSocketUpgrade,
     State(session): State<Session>,
 ) -> impl axum::response::IntoResponse {
-    ws.on_upgrade(move |socket| stream_client(socket, session))
+    ws.max_message_size(16 * 1024)
+        .max_frame_size(16 * 1024)
+        .on_upgrade(move |socket| stream_client(socket, session))
 }
 
 async fn stream_client(mut socket: WebSocket, session: Session) {
@@ -372,6 +375,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/v1/acquisitions/{id}/stream", get(acquisition::subscribe))
         .layer(DefaultBodyLimit::max(32 * 1024 * 1024))
         .layer(Extension(acquisition))
+        .layer(middleware::from_fn(security::local_api_guard))
         .with_state(session);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:8080").await?;
     println!("XCP Studio API: http://127.0.0.1:8080/api/health");
