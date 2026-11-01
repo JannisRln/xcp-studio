@@ -278,3 +278,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     axum::serve(listener, app).await?;
     Ok(())
 }
+
+#[cfg(test)]
+mod snapshot_tests {
+    use super::*;
+
+    #[test]
+    fn decodes_simulator_engine_speed() {
+        let bytes = 1850u32.to_le_bytes();
+        assert_eq!(SnapshotValueType::U32.byte_count(), 4);
+        assert_eq!(SnapshotValueType::U32.decode(&bytes), 1850.0);
+    }
+
+    #[test]
+    fn decodes_simulator_coolant_temperature() {
+        let bytes = 88.5f32.to_le_bytes();
+        assert_eq!(SnapshotValueType::F32.decode(&bytes), 88.5);
+    }
+
+    #[test]
+    fn decodes_signed_values() {
+        assert_eq!(SnapshotValueType::I16.decode(&(-123i16).to_le_bytes()), -123.0);
+    }
+}
