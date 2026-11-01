@@ -1,11 +1,11 @@
 ---
 id: T-0002
 title: Complete modular accessible dashboard architecture
-status: ready
+status: in-progress
 priority: P0
 area: frontend
-owner: unassigned
-branch: none
+owner: assistant-frontend-agent
+branch: feat/T-0002-dashboard-resilience
 github_issue: 5
 depends_on: []
 requirements: [UI-001, UI-002, UI-003, UI-004, ECU-011, ECU-012]
@@ -15,13 +15,13 @@ requirements: [UI-001, UI-002, UI-003, UI-004, ECU-011, ECU-012]
 
 ## Context / desired behavior
 
-PR #18 proposes a modular dashboard, chart, symbol browser, typed API and tests, but must be inspected for merge status before work. Its existence is not proof of feature completion.
+PR #18 was merged and introduced a modular dashboard, symbol browser, typed API and charts. Remaining gaps include page-level runtime-error recovery, reliable signal selection across page navigation, and independent validation of large symbol searches.
 
 **Desired outcome:** Complete modular accessible dashboard architecture. Implement according to [product specification](../product-specification.md), [architecture](../architecture.md) and [API contract](../api-contract.md), where applicable.
 
 ## Scope
 
-- [ ] Review/merge or reconcile PR #18 before editing overlapping frontend files.
+- [x] Review/merge or reconcile PR #18 before editing overlapping frontend files.
 - [ ] Separate app shell, feature modules, API client, domain types and shared controls with explicit ownership.
 - [ ] Add error boundaries, loading/empty/error/retry and keyboard interaction tests.
 - [ ] Validate ELF symbol list paging/search under large fixtures; preserve manual signal validation.

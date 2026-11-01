@@ -9,19 +9,18 @@ type Props = {
   connected: boolean;
   signals: SignalDefinition[];
   onRemove: (id: string) => void;
+  selectedIds: string[];
+  onToggle: (id: string) => void;
 };
 
-export function MeasurementsPage({ connected, signals, onRemove }: Props) {
-  const [selected, setSelected] = useState<string[]>(signals.map(s => s.id));
+export function MeasurementsPage({ connected, signals, onRemove, selectedIds, onToggle }: Props) {
   const [filter, setFilter] = useState("");
   const [intervalMs, setIntervalMs] = useState(100);
   const acquisition = useAcquisition(connected);
-  const active = useMemo(() => signals.filter(s => selected.includes(s.id)), [signals, selected]);
+  const active = useMemo(() => signals.filter(s => selectedIds.includes(s.id)), [signals, selectedIds]);
   const visible = signals.filter(s => s.name.toLowerCase().includes(filter.toLowerCase()) ||
     formatAddress(s.address).toLowerCase().includes(filter.toLowerCase()));
   const latest = acquisition.frames.at(-1);
-  const toggle = (id: string) => setSelected(previous =>
-    previous.includes(id) ? previous.filter(item => item !== id) : [...previous, id]);
 
   return <div className="workspace-stack">
     <div className="stats-row">
@@ -54,14 +53,11 @@ export function MeasurementsPage({ connected, signals, onRemove }: Props) {
         <input className="field" aria-label="Filter signals" placeholder="Search signals or address..." value={filter}
           onChange={e => setFilter(e.target.value)} />
         <div className="signal-rows">{visible.map(signal => <div className="signal-select-row" key={signal.id}>
-          <label><input type="checkbox" checked={selected.includes(signal.id)} onChange={() => toggle(signal.id)} />
+          <label><input type="checkbox" checked={selectedIds.includes(signal.id)} onChange={() => onToggle(signal.id)} />
             <span className="signal-color" style={{ background: signal.color }} />
             <span><strong>{signal.name}</strong><small>{formatAddress(signal.address)} · {signal.value_type} {signal.unit}</small></span>
           </label>
-          <button className="text-button" title={`Remove ${signal.name}`} onClick={() => {
-            onRemove(signal.id);
-            setSelected(previous => previous.filter(id => id !== signal.id));
-          }}>×</button>
+          <button className="text-button" type="button" aria-label={`Remove ${signal.name}`} onClick={() => onRemove(signal.id)}>×</button>
         </div>)}
           {!visible.length && <p className="muted">No matching signals. Add variables from Symbol Browser.</p>}
         </div>

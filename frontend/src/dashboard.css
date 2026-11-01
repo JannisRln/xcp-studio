@@ -159,3 +159,10 @@ select { width: auto; }
   .inspector-grid, .capability-grid { grid-template-columns: 1fr; }
   .pagination { flex-wrap: wrap; }
 }
+
+/* Accessible recovery and keyboard navigation states. */
+.workspace-error { border-color: #8c6172; background: #201f30; }
+.workspace-error h2 { margin: 0 0 12px; font-size: 18px; }
+.workspace-error p { max-width: 700px; color: #c7d2e3; line-height: 1.6; }
+.workspace-error .button { margin-top: 12px; }
+.page-heading h1:focus { outline: 2px solid #6ebeff; outline-offset: 7px; border-radius: 4px; }
