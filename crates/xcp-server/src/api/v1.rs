@@ -2,7 +2,6 @@
 //! Existing unversioned routes remain supported until consumers migrate.
 
 use super::super::Session;
-use xcp_core::session::{SessionError, SessionState};
 use axum::{
     extract::{rejection::JsonRejection, State},
     http::StatusCode,
@@ -10,6 +9,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
+use xcp_core::session::{SessionError, SessionState};
 
 const SCHEMA_VERSION: u8 = 1;
 static REQUEST_COUNTER: AtomicU64 = AtomicU64::new(1);
@@ -36,8 +36,16 @@ pub struct ApiErrorEnvelope {
 pub(crate) type ApiFailure = (StatusCode, Json<ApiErrorEnvelope>);
 type ApiResult<T> = Result<Json<T>, ApiFailure>;
 
-pub(crate) fn error(status: StatusCode, code: &str, message: impl Into<String>, retryable: bool) -> ApiFailure {
-    let request_id = format!("request-{}", REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed));
+pub(crate) fn error(
+    status: StatusCode,
+    code: &str,
+    message: impl Into<String>,
+    retryable: bool,
+) -> ApiFailure {
+    let request_id = format!(
+        "request-{}",
+        REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed)
+    );
     (
         status,
         Json(ApiErrorEnvelope {
@@ -146,12 +154,14 @@ pub async fn read(
 
     let bytes = tokio::task::spawn_blocking(move || session.read(request.address, request.count))
         .await
-        .map_err(|_| error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "XCP_WORKER_JOIN_FAILED",
-            "XCP session worker could not complete the read",
-            true,
-        ))?
+        .map_err(|_| {
+            error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "XCP_WORKER_JOIN_FAILED",
+                "XCP session worker could not complete the read",
+                true,
+            )
+        })?
         .map_err(|cause| match cause {
             SessionError::Disconnected => error(
                 StatusCode::CONFLICT,
@@ -209,8 +219,11 @@ mod tests {
         })
         .expect_err("address overflow must be rejected");
         assert_eq!(failed.1 .0.error.code, "INVALID_ADDRESS_RANGE");
-        validate_read_request(&ReadRequestV1 { address: u32::MAX, count: 1 })
-            .expect("one byte at the end does not overflow");
+        validate_read_request(&ReadRequestV1 {
+            address: u32::MAX,
+            count: 1,
+        })
+        .expect("one byte at the end does not overflow");
     }
 
     #[test]
@@ -231,7 +244,10 @@ mod tests {
         let session = actor.handle();
         let failed = read(
             State(session),
-            Ok(Json(ReadRequestV1 { address: 4096, count: 4 })),
+            Ok(Json(ReadRequestV1 {
+                address: 4096,
+                count: 4,
+            })),
         )
         .await
         .expect_err("read without a session must fail");
@@ -242,23 +258,20 @@ mod tests {
 
     #[test]
     fn shared_json_fixtures_match_rust_contracts() {
-        let health: HealthV1 = serde_json::from_str(include_str!(
-            "../../../../contracts/v1/health.json"
-        ))
-        .expect("health fixture");
+        let health: HealthV1 =
+            serde_json::from_str(include_str!("../../../../contracts/v1/health.json"))
+                .expect("health fixture");
         assert_eq!(health.schema_version, SCHEMA_VERSION);
         assert_eq!(health.mode, "simulation");
 
-        let session: SessionV1 = serde_json::from_str(include_str!(
-            "../../../../contracts/v1/session.json"
-        ))
-        .expect("session fixture");
+        let session: SessionV1 =
+            serde_json::from_str(include_str!("../../../../contracts/v1/session.json"))
+                .expect("session fixture");
         assert!(session.connected);
 
-        let read: ReadResultV1 = serde_json::from_str(include_str!(
-            "../../../../contracts/v1/read.json"
-        ))
-        .expect("read fixture");
+        let read: ReadResultV1 =
+            serde_json::from_str(include_str!("../../../../contracts/v1/read.json"))
+                .expect("read fixture");
         assert_eq!(read.bytes, [58, 7, 0, 0]);
         assert_eq!(read.hex, "3A 07 00 00");
 
@@ -271,15 +284,24 @@ mod tests {
 
         let validation: ApiErrorEnvelope = serde_json::from_str(include_str!(
             "../../../../contracts/v1/error-validation.json"
-        )).expect("structured validation fixture");
+        ))
+        .expect("structured validation fixture");
         assert_eq!(validation.error.code, "INVALID_SAMPLE_INTERVAL");
-        assert_eq!(validation.error.details.as_ref().unwrap()["field"], "interval_ms");
+        assert_eq!(
+            validation.error.details.as_ref().unwrap()["field"],
+            "interval_ms"
+        );
         let serialized = serde_json::to_value(validation).unwrap();
         assert_eq!(serialized["error"]["details"]["min"], 20);
         let unknown = serde_json::json!({"schema_version": 2, "error": {
             "code": "INVALID_JSON", "message": "invalid", "request_id": "req-1", "retryable": false
         }});
         // The wire version is validated by the TypeScript boundary, not serde's u8 type.
-        assert_ne!(serde_json::from_value::<ApiErrorEnvelope>(unknown).unwrap().schema_version, SCHEMA_VERSION);
+        assert_ne!(
+            serde_json::from_value::<ApiErrorEnvelope>(unknown)
+                .unwrap()
+                .schema_version,
+            SCHEMA_VERSION
+        );
     }
 }
