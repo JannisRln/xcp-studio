@@ -30,6 +30,7 @@ This roadmap sequences work against the [complete product specification](product
 **Goal:** Workspace configuration is a first-class, reviewable engineering artifact. Saving an unchanged project must produce zero Git diff; schema changes require deterministic, previewable, non-destructive migrations. This milestone follows usable Live View and is part of the simulator application's release criteria, not a deferred convenience feature.
 
 - T-0010: canonical plain-text project representation, stable IDs, split-by-entity or similarly low-conflict layout, portable identity references, deterministic canonical export and semantic validation.
+- Every persisted file reference resolves relative to the project manifest directory on all machines; external `../` ELF/A2L references are read-only and fingerprint-verified, and internal project files cannot traverse outside the project tree.
 - Versioned, explicit old→new migrations with dry-run change preview, corruption/conflict rejection, backup/rollback strategy and interrupted-save safety.
 - Functional Save/Open/Reopen from the UI, safe ELF/A2L identity reconciliation, and offline project validation suitable for Git CI.
 - [ADR 0003](adr/0003-git-native-projects.md) proposes the architecture; freeze a revised format only after the T-0010/T-0012 owners approve it. PR #51's single-file v1/v2 codec remains a compatibility starting point rather than an accepted multi-file v3 implementation.

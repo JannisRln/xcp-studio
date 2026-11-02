@@ -40,6 +40,10 @@ PR #51 provides an isolated, strictly validated, deterministically serialized JS
 
 7. **Separation of concerns.** The project format is a stable portable domain artifact. The React UI, optional native egui UI, and REST/WS DTOs are adapters; no independent or incompatible GUI-owned project schema. Any new common DTO/schema change needs T-0012 coordination. No built-in Git commit, push or user credential handling is required for this milestone.
 
+8. **All persisted paths relative to the project manifest.** The base for every stored file reference is **the directory containing the canonical project manifest** (for example `engine.xcpstudio/project.json`), regardless of the process working directory, executable, Git root or the location of a nested `signals/*.json` file. Store portable `/` separators and normalized relative paths only: never save absolute drive-letter, UNC, URL or platform-specific paths. A project move or clone may change the resolved locations; treat missing files as unresolved, not as permission to auto-search or silently rebind. Application runtime must resolve the references only after project validation.
+   
+   **External references:** Relative `../` segments are allowed for explicitly chosen external **read-only** ELF/A2L resources (for example `../firmware/engine.elf`) so a project can sit next to a firmware directory. Validate the normalized target, symlinks and resource type; require explicit user-authorized access to files outside the project directory and verify the SHA-256/file identity before any ECU-dependent use. A path alone never grants runtime-address authority. **Internal project configuration:** no `../` escape outside the project directory; reject traversal, invalid separators/encodings, absolute paths and symlink escapes on read or write. Do not turn an external reference into an automatic file-write target. Reject rather than guess if migration of a legacy filename-only reference cannot identify a safe relative path.
+
 ## Alternatives considered
 
 - **One canonical JSON file only:** simplest storage and already prototyped by PR #51, but shared arrays/layout create noisy diffs and overlapping merge conflicts as a workspace grows. Retain as portable exchange.
@@ -70,6 +74,9 @@ Changing the proposed layout must be explicit in a reviewed ADR update. The merg
 - A conflicted/invalid project is rejected without partial restoration or ECU I/O.
 - A simulated power-loss/disk-error at every persistence stage preserves the prior verified workspace or a documented recoverable generation.
 - The same tracked project opens on another machine after external file relocation, requiring deliberate fingerprint reconciliation rather than an unsafe automatic remap.
+- With the same manifest and directory tree, path resolution is identical regardless of process CWD or GUI executable location; nested entity files still use manifest-relative paths.
+- Absolute/drive/UNC/URL paths, internal `../` traversal and symlink escapes fail validation. External relative ELF/A2L references such as `../firmware/engine.elf` require explicit access and matching identity; missing or changed targets remain blocked.
+- The v1/v2 filename-only importer never invents a relative path from a name without verified user selection.
 - A repository check validates project files offline in Windows CI, including a negative mutation fixture.
 
 **Status note:** These are target requirements, not claims about present implementation or PR #51 passing them.
