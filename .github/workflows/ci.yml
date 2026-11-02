@@ -19,7 +19,9 @@ jobs:
         run: |
           # The existing main baseline contains rustfmt debt. Check every Rust
           # source modified by this PR before accepting runner normalization.
-          $base = (git merge-base HEAD "origin/${{ github.base_ref }}")
+          $baseBranch = "${{ github.base_ref }}"
+          if ([string]::IsNullOrWhiteSpace($baseBranch)) { $baseBranch = "main" }
+          $base = (git merge-base HEAD "origin/$baseBranch")
           if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($base)) {
             throw "Cannot determine the PR merge base for Rust format validation"
           }
