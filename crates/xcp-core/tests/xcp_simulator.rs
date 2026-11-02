@@ -156,14 +156,25 @@ fn unrelated_traffic_respects_deadline() {
     assert!(matches!(master.connect(), Err(XcpError::NoResponse)));
 }
 
-
 #[test]
 fn empty_and_overflowing_accesses_fail_before_transmission() {
     let mut master = master();
-    assert!(matches!(master.read(0x1000, 0), Err(XcpError::InvalidParameters)));
-    assert!(matches!(master.write(0x1000, &[]), Err(XcpError::InvalidParameters)));
-    assert!(matches!(master.read(u32::MAX, 2), Err(XcpError::InvalidParameters)));
-    assert!(matches!(master.write(u32::MAX, &[1, 2]), Err(XcpError::InvalidParameters)));
+    assert!(matches!(
+        master.read(0x1000, 0),
+        Err(XcpError::InvalidParameters)
+    ));
+    assert!(matches!(
+        master.write(0x1000, &[]),
+        Err(XcpError::InvalidParameters)
+    ));
+    assert!(matches!(
+        master.read(u32::MAX, 2),
+        Err(XcpError::InvalidParameters)
+    ));
+    assert!(matches!(
+        master.write(u32::MAX, &[1, 2]),
+        Err(XcpError::InvalidParameters)
+    ));
 }
 
 #[test]

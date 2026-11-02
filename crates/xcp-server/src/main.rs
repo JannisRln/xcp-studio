@@ -1,20 +1,24 @@
-mod security;
-mod hardware_policy;
 mod acquisition;
 mod api;
+mod hardware_policy;
+mod security;
 
 use axum::{
-    extract::{ws::{Message, WebSocket, WebSocketUpgrade}, DefaultBodyLimit, Extension, State},
+    extract::{
+        ws::{Message, WebSocket, WebSocketUpgrade},
+        DefaultBodyLimit, Extension, State,
+    },
     http::StatusCode,
+    middleware,
     response::IntoResponse,
     routing::{get, post},
-    middleware, Json, Router,
+    Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use xcp_core::session::{SessionActor, SessionError, SessionHandle, SessionState};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::{interval, timeout, Duration, MissedTickBehavior};
+use xcp_core::session::{SessionActor, SessionError, SessionHandle, SessionState};
 use xcp_core::xcp::{CanIds, SimulatedSlave, SimulatedTransport, XcpMaster};
 
 type Session = SessionHandle;
@@ -180,14 +184,24 @@ async fn session_read(
     Json(request): Json<ReadRequest>,
 ) -> Result<Json<ReadResult>, (StatusCode, Json<ApiError>)> {
     if request.count == 0 || request.count > 4096 {
-        return Err((StatusCode::BAD_REQUEST, Json(ApiError {
-            error: "count must be between 1 and 4096".into(),
-        })));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiError {
+                error: "count must be between 1 and 4096".into(),
+            }),
+        ));
     }
-    if request.address.checked_add((request.count - 1) as u32).is_none() {
-        return Err((StatusCode::BAD_REQUEST, Json(ApiError {
-            error: "read exceeds the address space".into(),
-        })));
+    if request
+        .address
+        .checked_add((request.count - 1) as u32)
+        .is_none()
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiError {
+                error: "read exceeds the address space".into(),
+            }),
+        ));
     }
     let bytes = execute_xcp(move || session.read(request.address, request.count)).await?;
     let hex = bytes
@@ -201,7 +215,6 @@ async fn session_read(
         hex,
     }))
 }
-
 
 #[derive(Deserialize)]
 struct SnapshotRequest {
@@ -270,26 +283,38 @@ async fn session_snapshot(
     Json(request): Json<SnapshotRequest>,
 ) -> Result<Json<SnapshotResult>, (StatusCode, Json<ApiError>)> {
     if request.signals.is_empty() || request.signals.len() > 64 {
-        return Err((StatusCode::BAD_REQUEST, Json(ApiError {
-            error: "signals must contain between 1 and 64 entries".into(),
-        })));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiError {
+                error: "signals must contain between 1 and 64 entries".into(),
+            }),
+        ));
     }
     if request
         .signals
         .iter()
         .any(|signal| signal.name.trim().is_empty() || signal.name.len() > 128)
     {
-        return Err((StatusCode::BAD_REQUEST, Json(ApiError {
-            error: "signal names must contain 1 to 128 characters".into(),
-        })));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiError {
+                error: "signal names must contain 1 to 128 characters".into(),
+            }),
+        ));
     }
 
     if request.signals.iter().any(|signal| {
-        signal.address.checked_add((signal.value_type.byte_count() - 1) as u32).is_none()
+        signal
+            .address
+            .checked_add((signal.value_type.byte_count() - 1) as u32)
+            .is_none()
     }) {
-        return Err((StatusCode::BAD_REQUEST, Json(ApiError {
-            error: "signal address exceeds the address space".into(),
-        })));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiError {
+                error: "signal address exceeds the address space".into(),
+            }),
+        ));
     }
 
     // A single actor owns all MTA transitions; requests from multiple
@@ -316,9 +341,11 @@ async fn session_snapshot(
         .duration_since(UNIX_EPOCH)
         .map_err(|_| internal_error())?
         .as_millis();
-    Ok(Json(SnapshotResult { timestamp_ms, samples }))
+    Ok(Json(SnapshotResult {
+        timestamp_ms,
+        samples,
+    }))
 }
-
 
 #[derive(Deserialize)]
 struct StreamConfig {
@@ -373,7 +400,11 @@ async fn stream_client(mut socket: WebSocket, session: Session) {
         _ => None,
     };
     let Some(config) = config else {
-        send_stream_error(&mut socket, r#"{"error":"expected stream configuration JSON"}"#).await;
+        send_stream_error(
+            &mut socket,
+            r#"{"error":"expected stream configuration JSON"}"#,
+        )
+        .await;
         return;
     };
     if !valid_stream_config(&config) {
@@ -467,7 +498,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/v1/acquisitions/current", get(acquisition::current))
         .route("/api/v1/acquisitions/{id}", get(acquisition::status))
         .route("/api/v1/acquisitions/{id}/stop", post(acquisition::stop))
-        .route("/api/v1/acquisitions/{id}/stream", get(acquisition::subscribe))
+        .route(
+            "/api/v1/acquisitions/{id}/stream",
+            get(acquisition::subscribe),
+        )
         .layer(DefaultBodyLimit::max(security::MAX_JSON_BODY))
         .layer(Extension(acquisition))
         .layer(Extension(Arc::clone(&limits)))
@@ -505,7 +539,13 @@ mod snapshot_tests {
         let session = actor.handle();
 
         assert!(!session_status(State(session.clone())).await.0.connected);
-        assert!(session_connect(State(session.clone())).await.unwrap().0.connected);
+        assert!(
+            session_connect(State(session.clone()))
+                .await
+                .unwrap()
+                .0
+                .connected
+        );
 
         let read = session_read(
             State(session.clone()),
@@ -543,10 +583,16 @@ mod snapshot_tests {
         assert_eq!(snapshot.samples[0].value, 1850.0);
         assert_eq!(snapshot.samples[1].value, 88.5);
 
-        assert!(!session_disconnect(
-            State(session.clone()),
-            Extension(Arc::new(acquisition::AcquisitionService::default())),
-        ).await.unwrap().0.connected);
+        assert!(
+            !session_disconnect(
+                State(session.clone()),
+                Extension(Arc::new(acquisition::AcquisitionService::default())),
+            )
+            .await
+            .unwrap()
+            .0
+            .connected
+        );
         let failure = session_read(
             State(session),
             Json(ReadRequest {
@@ -594,7 +640,8 @@ mod snapshot_tests {
 
     #[test]
     fn rejects_stream_address_overflow_and_unbounded_configuration() {
-        let good = r#"{"interval_ms":20,"signals":[{"name":"rpm","address":4096,"value_type":"u32"}]}"#;
+        let good =
+            r#"{"interval_ms":20,"signals":[{"name":"rpm","address":4096,"value_type":"u32"}]}"#;
         let mut config: StreamConfig = serde_json::from_str(good).unwrap();
         assert!(valid_stream_config(&config));
         config.signals[0].address = u32::MAX;
@@ -616,7 +663,10 @@ mod snapshot_tests {
         let session = actor.handle();
         let failed = session_read(
             State(session.clone()),
-            Json(ReadRequest { address: u32::MAX, count: 2 }),
+            Json(ReadRequest {
+                address: u32::MAX,
+                count: 2,
+            }),
         )
         .await
         .err()
@@ -641,6 +691,9 @@ mod snapshot_tests {
 
     #[test]
     fn decodes_signed_values() {
-        assert_eq!(SnapshotValueType::I16.decode(&(-123i16).to_le_bytes()), -123.0);
+        assert_eq!(
+            SnapshotValueType::I16.decode(&(-123i16).to_le_bytes()),
+            -123.0
+        );
     }
 }

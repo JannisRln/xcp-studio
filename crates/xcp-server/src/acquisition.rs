@@ -6,9 +6,8 @@
 
 use crate::api::v1::{error, ApiFailure};
 use crate::security;
-use crate::{
-    session_snapshot, Session, SnapshotRequest, SnapshotSignalRequest,
-};
+use crate::SnapshotValueType;
+use crate::{session_snapshot, Session, SnapshotRequest, SnapshotSignalRequest};
 use axum::{
     extract::{
         rejection::JsonRejection,
@@ -32,7 +31,6 @@ use tokio::{
     time::{interval, timeout, Duration, Instant, MissedTickBehavior},
 };
 use xcp_core::session::SessionState;
-use crate::SnapshotValueType;
 
 const RUNNING: u8 = 1;
 const STOPPED: u8 = 2;
@@ -67,7 +65,8 @@ impl AcquisitionConfig {
         }
         let mut names = HashSet::with_capacity(self.signals.len());
         for signal in &self.signals {
-            if signal.name.trim().is_empty() || signal.name.len() > 128
+            if signal.name.trim().is_empty()
+                || signal.name.len() > 128
                 || !names.insert(signal.name.as_str())
             {
                 return Err(error(
@@ -110,12 +109,16 @@ pub struct AcquisitionStatus {
 /// Valid does not imply a simultaneous ECU timestamp or a verified address.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum SampleQuality { Valid }
+pub enum SampleQuality {
+    Valid,
+}
 
 /// The v1 acquisition accepts manually configured raw ECU addresses.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum AddressOrigin { Manual }
+pub enum AddressOrigin {
+    Manual,
+}
 
 /// Additive metadata is optional to preserve pre-extension v1 JSON fixtures.
 #[derive(Clone, Serialize, Deserialize)]
@@ -139,20 +142,42 @@ impl AcquisitionSampleV1 {
         if self.name.trim().is_empty() || self.name.len() > 128 || !self.value.is_finite() {
             return Err("invalid sample name or non-finite value");
         }
-        let Some(kind) = &self.value_type else { return Ok(()); };
-        if self.address.checked_add(kind.byte_count() as u32 - 1).is_none() {
+        let Some(kind) = &self.value_type else {
+            return Ok(());
+        };
+        if self
+            .address
+            .checked_add(kind.byte_count() as u32 - 1)
+            .is_none()
+        {
             return Err("sample width exceeds 32-bit address space");
         }
         let valid = match kind {
-            SnapshotValueType::U8 => self.value.fract() == 0.0 && (0.0..=255.0).contains(&self.value),
-            SnapshotValueType::I8 => self.value.fract() == 0.0 && (-128.0..=127.0).contains(&self.value),
-            SnapshotValueType::U16 => self.value.fract() == 0.0 && (0.0..=65535.0).contains(&self.value),
-            SnapshotValueType::I16 => self.value.fract() == 0.0 && (-32768.0..=32767.0).contains(&self.value),
-            SnapshotValueType::U32 => self.value.fract() == 0.0 && (0.0..=4294967295.0).contains(&self.value),
-            SnapshotValueType::I32 => self.value.fract() == 0.0 && (-2147483648.0..=2147483647.0).contains(&self.value),
+            SnapshotValueType::U8 => {
+                self.value.fract() == 0.0 && (0.0..=255.0).contains(&self.value)
+            }
+            SnapshotValueType::I8 => {
+                self.value.fract() == 0.0 && (-128.0..=127.0).contains(&self.value)
+            }
+            SnapshotValueType::U16 => {
+                self.value.fract() == 0.0 && (0.0..=65535.0).contains(&self.value)
+            }
+            SnapshotValueType::I16 => {
+                self.value.fract() == 0.0 && (-32768.0..=32767.0).contains(&self.value)
+            }
+            SnapshotValueType::U32 => {
+                self.value.fract() == 0.0 && (0.0..=4294967295.0).contains(&self.value)
+            }
+            SnapshotValueType::I32 => {
+                self.value.fract() == 0.0 && (-2147483648.0..=2147483647.0).contains(&self.value)
+            }
             SnapshotValueType::F32 | SnapshotValueType::F64 => true,
         };
-        if valid { Ok(()) } else { Err("value exceeds declared scalar type range") }
+        if valid {
+            Ok(())
+        } else {
+            Err("value exceeds declared scalar type range")
+        }
     }
 }
 
@@ -217,7 +242,11 @@ impl AcquisitionRun {
             sequence: self.sequence.load(Ordering::Relaxed),
             subscriber_count: self.subscribers.load(Ordering::Relaxed),
             dropped_subscriber_frames: self.dropped.load(Ordering::Relaxed),
-            error: self.last_error.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+            error: self
+                .last_error
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone(),
         }
     }
 
@@ -227,7 +256,9 @@ impl AcquisitionRun {
         }
     }
 
-    fn subscribe(self: &Arc<Self>) -> Result<(Subscription, broadcast::Receiver<AcquisitionEvent>), ApiFailure> {
+    fn subscribe(
+        self: &Arc<Self>,
+    ) -> Result<(Subscription, broadcast::Receiver<AcquisitionEvent>), ApiFailure> {
         if self.state.load(Ordering::Acquire) != RUNNING {
             return Err(error(
                 StatusCode::CONFLICT,
@@ -247,16 +278,26 @@ impl AcquisitionRun {
                 ));
             }
             match self.subscribers.compare_exchange_weak(
-                current, current + 1, Ordering::AcqRel, Ordering::Acquire,
+                current,
+                current + 1,
+                Ordering::AcqRel,
+                Ordering::Acquire,
             ) {
                 Ok(_) => break,
                 Err(actual) => current = actual,
             }
         }
-        let guard = Subscription { run: Arc::clone(self) };
+        let guard = Subscription {
+            run: Arc::clone(self),
+        };
         let receiver = self.tx.subscribe();
         if self.state.load(Ordering::Acquire) != RUNNING {
-            return Err(error(StatusCode::CONFLICT, "ACQUISITION_NOT_RUNNING", "acquisition stopped during subscription", false));
+            return Err(error(
+                StatusCode::CONFLICT,
+                "ACQUISITION_NOT_RUNNING",
+                "acquisition stopped during subscription",
+                false,
+            ));
         }
         Ok((guard, receiver))
     }
@@ -287,13 +328,27 @@ impl AcquisitionService {
             .as_ref()
             .filter(|run| run.id == id)
             .cloned()
-            .ok_or_else(|| error(StatusCode::NOT_FOUND, "ACQUISITION_NOT_FOUND", "unknown acquisition ID", false))
+            .ok_or_else(|| {
+                error(
+                    StatusCode::NOT_FOUND,
+                    "ACQUISITION_NOT_FOUND",
+                    "unknown acquisition ID",
+                    false,
+                )
+            })
     }
 
-    fn start(&self, session: Session, config: AcquisitionConfig) -> Result<Arc<AcquisitionRun>, ApiFailure> {
+    fn start(
+        &self,
+        session: Session,
+        config: AcquisitionConfig,
+    ) -> Result<Arc<AcquisitionRun>, ApiFailure> {
         config.validate()?;
         let mut current = self.current.lock().unwrap_or_else(|e| e.into_inner());
-        if current.as_ref().is_some_and(|run| run.state.load(Ordering::Acquire) == RUNNING) {
+        if current
+            .as_ref()
+            .is_some_and(|run| run.state.load(Ordering::Acquire) == RUNNING)
+        {
             return Err(error(
                 StatusCode::CONFLICT,
                 "ACQUISITION_ALREADY_RUNNING",
@@ -393,7 +448,11 @@ async fn acquire(run: Arc<AcquisitionRun>, session: Session, mut stop_rx: watch:
         schema_version: 1,
         acquisition_id: run.id.clone(),
         state: if failed { "failed" } else { "stopped" },
-        reason: if failed { "xcp_read_error" } else { "operator_stop" },
+        reason: if failed {
+            "xcp_read_error"
+        } else {
+            "operator_stop"
+        },
     });
 }
 
@@ -403,16 +462,40 @@ pub async fn create(
     payload: Result<Json<AcquisitionConfig>, JsonRejection>,
 ) -> Result<(StatusCode, Json<AcquisitionStatus>), ApiFailure> {
     let Json(config) = payload.map_err(|_| {
-        error(StatusCode::BAD_REQUEST, "INVALID_JSON", "invalid acquisition configuration", false)
+        error(
+            StatusCode::BAD_REQUEST,
+            "INVALID_JSON",
+            "invalid acquisition configuration",
+            false,
+        )
     })?;
     config.validate()?;
     let handle = session.clone();
     let connected = tokio::task::spawn_blocking(move || handle.state())
         .await
-        .map_err(|_| error(StatusCode::SERVICE_UNAVAILABLE, "XCP_WORKER_STOPPED", "session worker failed", true))?
-        .map_err(|_| error(StatusCode::SERVICE_UNAVAILABLE, "XCP_WORKER_STOPPED", "session worker unavailable", true))?;
+        .map_err(|_| {
+            error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "XCP_WORKER_STOPPED",
+                "session worker failed",
+                true,
+            )
+        })?
+        .map_err(|_| {
+            error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "XCP_WORKER_STOPPED",
+                "session worker unavailable",
+                true,
+            )
+        })?;
     if connected != SessionState::Connected {
-        return Err(error(StatusCode::CONFLICT, "XCP_SESSION_DISCONNECTED", "connect the XCP simulator first", false));
+        return Err(error(
+            StatusCode::CONFLICT,
+            "XCP_SESSION_DISCONNECTED",
+            "connect the XCP simulator first",
+            false,
+        ));
     }
     let run = service.start(session, config)?;
     Ok((StatusCode::CREATED, Json(run.status())))
@@ -423,12 +506,14 @@ pub async fn current(
     Extension(service): Extension<Arc<AcquisitionService>>,
 ) -> Result<Json<AcquisitionStatus>, ApiFailure> {
     let current = service.current.lock().unwrap_or_else(|e| e.into_inner());
-    let run = current.as_ref().ok_or_else(|| error(
-        StatusCode::NOT_FOUND,
-        "ACQUISITION_NOT_FOUND",
-        "no acquisition has been created",
-        false,
-    ))?;
+    let run = current.as_ref().ok_or_else(|| {
+        error(
+            StatusCode::NOT_FOUND,
+            "ACQUISITION_NOT_FOUND",
+            "no acquisition has been created",
+            false,
+        )
+    })?;
     Ok(Json(run.status()))
 }
 
@@ -455,7 +540,8 @@ pub async fn subscribe(
 ) -> Result<impl IntoResponse, ApiFailure> {
     let run = service.current(&id)?;
     let (guard, receiver) = run.subscribe()?;
-    Ok(ws.max_message_size(security::MAX_WS_MESSAGE)
+    Ok(ws
+        .max_message_size(security::MAX_WS_MESSAGE)
         .max_frame_size(security::MAX_WS_MESSAGE)
         .on_upgrade(move |socket| send_events(socket, guard, receiver)))
 }
@@ -506,10 +592,7 @@ async fn send_events(
 
         }
     }
-    let _ = timeout(
-        security::WS_SEND_TIMEOUT,
-        socket.send(Message::Close(None)),
-    ).await;
+    let _ = timeout(security::WS_SEND_TIMEOUT, socket.send(Message::Close(None))).await;
 }
 
 #[cfg(test)]
@@ -567,7 +650,8 @@ mod tests {
         };
         let expected: serde_json::Value = serde_json::from_str(include_str!(
             "../../../contracts/v1/acquisition-sample.json"
-        )).unwrap();
+        ))
+        .unwrap();
         assert_eq!(serde_json::to_value(sample).unwrap(), expected);
 
         let gap = AcquisitionEvent::Gap {
@@ -576,30 +660,37 @@ mod tests {
             dropped: 11,
             scope: None,
         };
-        let expected: serde_json::Value = serde_json::from_str(include_str!(
-            "../../../contracts/v1/acquisition-gap.json"
-        )).unwrap();
+        let expected: serde_json::Value =
+            serde_json::from_str(include_str!("../../../contracts/v1/acquisition-gap.json"))
+                .unwrap();
         assert_eq!(serde_json::to_value(gap).unwrap(), expected);
         let scoped = AcquisitionEvent::Gap {
-            schema_version: 1, acquisition_id: "acq-1".into(), dropped: 11,
+            schema_version: 1,
+            acquisition_id: "acq-1".into(),
+            dropped: 11,
             scope: Some("subscriber"),
         };
         let expected: serde_json::Value = serde_json::from_str(include_str!(
             "../../../contracts/v1/acquisition-gap-scoped.json"
-        )).unwrap();
+        ))
+        .unwrap();
         assert_eq!(serde_json::to_value(scoped).unwrap(), expected);
         let failed = AcquisitionEvent::Status {
-            schema_version: 1, acquisition_id: "acq-1".into(),
-            state: "failed", reason: "xcp_read_error",
+            schema_version: 1,
+            acquisition_id: "acq-1".into(),
+            state: "failed",
+            reason: "xcp_read_error",
         };
         let expected: serde_json::Value = serde_json::from_str(include_str!(
             "../../../contracts/v1/acquisition-failed.json"
-        )).unwrap();
+        ))
+        .unwrap();
         assert_eq!(serde_json::to_value(failed).unwrap(), expected);
 
         let enriched: serde_json::Value = serde_json::from_str(include_str!(
             "../../../contracts/v1/acquisition-sample-qualified.json"
-        )).unwrap();
+        ))
+        .unwrap();
         let encoded = serde_json::to_value(AcquisitionEvent::Samples {
             schema_version: 1,
             acquisition_id: "acq-1".into(),
@@ -610,13 +701,18 @@ mod tests {
             timestamp_origin: Some("host_utc_after_reads"),
             monotonic_clock: Some("acquisition_elapsed"),
             samples: vec![AcquisitionSampleV1 {
-                name: "Engine speed".into(), address: 4096, value: 1850.0,
-                value_type: Some(SnapshotValueType::U32), quality: Some(SampleQuality::Valid),
+                name: "Engine speed".into(),
+                address: 4096,
+                value: 1850.0,
+                value_type: Some(SnapshotValueType::U32),
+                quality: Some(SampleQuality::Valid),
                 address_origin: Some(AddressOrigin::Manual),
             }],
-        }).unwrap();
+        })
+        .unwrap();
         assert_eq!(encoded, enriched);
-        let decoded: AcquisitionSampleV1 = serde_json::from_value(enriched["samples"][0].clone()).unwrap();
+        let decoded: AcquisitionSampleV1 =
+            serde_json::from_value(enriched["samples"][0].clone()).unwrap();
         assert!(matches!(decoded.quality, Some(SampleQuality::Valid)));
         assert!(decoded.validate().is_ok());
         for (kind, value) in [
@@ -627,11 +723,17 @@ mod tests {
             (SnapshotValueType::U32, 4294967296.0),
             (SnapshotValueType::I32, 1.25),
         ] {
-            let wrong = AcquisitionSampleV1 { value_type: Some(kind), value, ..decoded.clone() };
+            let wrong = AcquisitionSampleV1 {
+                value_type: Some(kind),
+                value,
+                ..decoded.clone()
+            };
             assert!(wrong.validate().is_err());
         }
         let overflow = AcquisitionSampleV1 {
-            address: u32::MAX, value_type: Some(SnapshotValueType::F64), ..decoded.clone()
+            address: u32::MAX,
+            value_type: Some(SnapshotValueType::F64),
+            ..decoded.clone()
         };
         assert!(overflow.validate().is_err());
         for invalid in [
@@ -639,7 +741,9 @@ mod tests {
             serde_json::json!({"name":"rpm","address":4096,"value":1850,"value_type":"u64"}),
             serde_json::json!({"name":"rpm","address":4096,"value":1850,"address_origin":"elf_verified"}),
             serde_json::json!({"name":"rpm","address":4294967296_u64,"value":1850}),
-        ] { assert!(serde_json::from_value::<AcquisitionSampleV1>(invalid).is_err()); }
+        ] {
+            assert!(serde_json::from_value::<AcquisitionSampleV1>(invalid).is_err());
+        }
     }
 
     #[test]
@@ -654,7 +758,10 @@ mod tests {
         }
         assert!(serde_json::from_str::<AcquisitionConfig>(
             r#"{"interval_ms":100,"signals":[{"name":"rpm","address":4096,"value_type":"u32"}]}"#
-        ).unwrap().validate().is_ok());
+        )
+        .unwrap()
+        .validate()
+        .is_ok());
     }
 
     #[test]
@@ -662,15 +769,27 @@ mod tests {
         let mut value = config();
         assert!(value.validate().is_ok());
         value.interval_ms = 19;
-        assert_eq!(value.validate().unwrap_err().1 .0.error.code, "INVALID_SAMPLE_INTERVAL");
+        assert_eq!(
+            value.validate().unwrap_err().1 .0.error.code,
+            "INVALID_SAMPLE_INTERVAL"
+        );
         value.interval_ms = 20;
         value.signals[1].name = value.signals[0].name.clone();
-        assert_eq!(value.validate().unwrap_err().1 .0.error.code, "INVALID_SIGNAL_NAME");
+        assert_eq!(
+            value.validate().unwrap_err().1 .0.error.code,
+            "INVALID_SIGNAL_NAME"
+        );
         value.signals[1].name = "Coolant".into();
         value.signals[1].address = u32::MAX;
-        assert_eq!(value.validate().unwrap_err().1 .0.error.code, "INVALID_SIGNAL_ADDRESS");
+        assert_eq!(
+            value.validate().unwrap_err().1 .0.error.code,
+            "INVALID_SIGNAL_ADDRESS"
+        );
         value.signals.clear();
-        assert_eq!(value.validate().unwrap_err().1 .0.error.code, "INVALID_SIGNALS");
+        assert_eq!(
+            value.validate().unwrap_err().1 .0.error.code,
+            "INVALID_SIGNALS"
+        );
     }
 
     #[tokio::test]
@@ -682,18 +801,37 @@ mod tests {
         let run = service.start(session, config()).unwrap();
         let (_a, mut first) = run.subscribe().unwrap();
         let (_b, mut second) = run.subscribe().unwrap();
-        let a = tokio::time::timeout(Duration::from_secs(2), first.recv()).await.unwrap().unwrap();
-        let b = tokio::time::timeout(Duration::from_secs(2), second.recv()).await.unwrap().unwrap();
-        let (AcquisitionEvent::Samples { sequence: sa, samples, .. },
-             AcquisitionEvent::Samples { sequence: sb, .. }) = (a, b) else {
+        let a = tokio::time::timeout(Duration::from_secs(2), first.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        let b = tokio::time::timeout(Duration::from_secs(2), second.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        let (
+            AcquisitionEvent::Samples {
+                sequence: sa,
+                samples,
+                ..
+            },
+            AcquisitionEvent::Samples { sequence: sb, .. },
+        ) = (a, b)
+        else {
             panic!("both subscribers must receive the same sample event")
         };
         assert_eq!(sa, sb);
         assert_eq!(samples[0].value, 1850.0);
         assert_eq!(samples[1].value, 88.5);
         assert!(matches!(samples[0].quality, Some(SampleQuality::Valid)));
-        assert!(matches!(samples[0].address_origin, Some(AddressOrigin::Manual)));
-        assert!(matches!(samples[0].value_type.as_ref(), Some(SnapshotValueType::U32)));
+        assert!(matches!(
+            samples[0].address_origin,
+            Some(AddressOrigin::Manual)
+        ));
+        assert!(matches!(
+            samples[0].value_type.as_ref(),
+            Some(SnapshotValueType::U32)
+        ));
         assert!(samples.iter().all(|sample| sample.validate().is_ok()));
         assert_eq!(run.status().subscriber_count, 2);
         assert_eq!(run.status().sampling_mode, "polling");
@@ -724,7 +862,10 @@ mod tests {
                 samples: vec![],
             });
         }
-        assert!(matches!(slow.try_recv(), Err(broadcast::error::TryRecvError::Lagged(_))));
+        assert!(matches!(
+            slow.try_recv(),
+            Err(broadcast::error::TryRecvError::Lagged(_))
+        ));
         run.stop();
     }
 
@@ -752,7 +893,10 @@ mod tests {
             State(actor.handle()),
             Extension(service.clone()),
             Ok(Json(config())),
-        ).await.err().unwrap();
+        )
+        .await
+        .err()
+        .unwrap();
         assert_eq!(result.1 .0.error.code, "XCP_SESSION_DISCONNECTED");
         assert!(service.current.lock().unwrap().is_none());
     }
