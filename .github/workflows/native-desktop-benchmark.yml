@@ -91,3 +91,18 @@ jobs:
           name: xcp-native-desktop-windows
           path: artifacts/native-gui/
           if-no-files-found: warn
+
+  native-source-format:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check committed native Rust formatting and print exact diff
+        shell: pwsh
+        run: |
+          cargo fmt -p xcp-desktop
+          if ($LASTEXITCODE -ne 0) { throw 'rustfmt failed' }
+          git diff -- crates/xcp-desktop/src
+          if ($LASTEXITCODE -ne 0) { throw 'cannot inspect format diff' }
+          git diff --exit-code -- crates/xcp-desktop/src
+          if ($LASTEXITCODE -ne 0) { throw 'Commit rustfmt results to native Rust sources' }
