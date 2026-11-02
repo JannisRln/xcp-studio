@@ -50,6 +50,8 @@
 
 **T-0014 coordination:** `chatgpt-t0014-core` owns the standalone resolver phase in `feature/T-0014-bounded-pointer-core`. Overall integration is still blocked; no session, metadata, DTO, or frontend ownership is transferred. See its ticket for pending decisions.
 
+**Historical batch integration review (2026-11-01):** See [PRs #48–#53 readiness review](../integration-prs-48-53-2026-11-01.md) for dated Windows CI, browser E2E and pointer-security findings. **Current status (2026-11-02):** #48, #49 (with #56 fix), #50, #51 and #52 are merged as bounded core phases. #53 remains draft; #55 is an experimental GUI and #59 is QA-only **DO NOT MERGE**. The repository ruleset no longer requires a PR, but still enforces the four CI jobs. Historical statements in that review must not be read as current acceptance.
+
 **Merge discipline:** one branch/owner per ticket; cross-module schema change via T-0012; dependencies must be confirmed DONE unless a narrowly scoped independent phase is documented in the ticket. A BLOCKED item is not automatically assignable. Green CI is necessary but not sufficient for acceptance.
 
 ## Completion rules
