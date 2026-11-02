@@ -8,6 +8,7 @@ ADRs capture **accepted or proposed** design choices that affect multiple module
 | --- | --- | --- | --- |
 | [0001 — Control plane and streaming](0001-control-and-streaming.md) | REST for commands; WebSocket for continuous events | Accepted principle; shared backend service remains target | T-0012, T-0005 |
 | [0002 — Session and acquisition ownership](0002-session-and-acquisition-ownership.md) | Rust actor/session owns ECU I/O; backend acquisition owns sampling | Target; not fully implemented | T-0004, T-0005, T-0015 |
+| [0003 — Git-native project persistence](0003-git-native-projects.md) | Reviewable project files, deterministic diffs, explicit migrations and fail-safe saves | Proposed for owner review | T-0010, T-0012 |
 
 ## ADR convention
 
