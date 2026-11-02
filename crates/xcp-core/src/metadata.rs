@@ -125,7 +125,10 @@ struct Die {
     location: AddressProvenance,
 }
 
-fn numeric<R: Reader>(entry: &gimli::DebuggingInformationEntry<R>, name: gimli::DwAt) -> Result<Option<u64>, gimli::Error> {
+fn numeric<R: Reader>(
+    entry: &gimli::DebuggingInformationEntry<R>,
+    name: gimli::DwAt,
+) -> Result<Option<u64>, gimli::Error> {
     Ok(entry.attr(name)?.and_then(|attr| attr.udata_value()))
 }
 
@@ -197,9 +200,7 @@ fn member_location<R: Reader>(
     unit: &gimli::Unit<R>,
 ) -> Result<Option<u64>, gimli::Error> {
     match entry.attr_value(gimli::DW_AT_data_member_location)? {
-        Some(AttributeValue::Exprloc(expr)) => {
-            constant_member_expression(expr, unit.encoding())
-        }
+        Some(AttributeValue::Exprloc(expr)) => constant_member_expression(expr, unit.encoding()),
         Some(AttributeValue::Sdata(value)) => Ok(u64::try_from(value).ok()),
         Some(value) => Ok(value.udata_value()),
         None => Ok(None),
@@ -265,13 +266,17 @@ fn resolve_type(
     depth: usize,
     remaining: &mut usize,
 ) -> TypeDescriptor {
-    let Some(id) = id else { return unknown_type(); };
+    let Some(id) = id else {
+        return unknown_type();
+    };
     if depth >= MAX_TYPE_DEPTH || *remaining == 0 || !visiting.insert(id) {
         return unknown_type();
     }
     *remaining -= 1;
     let result = (|| {
-        let Some(die) = dies.get(&id) else { return unknown_type(); };
+        let Some(die) = dies.get(&id) else {
+            return unknown_type();
+        };
         let tag = die.tag;
         let name = die.name.clone().unwrap_or_else(|| "<anonymous>".into());
         let mut desc = TypeDescriptor {
@@ -285,11 +290,19 @@ fn resolve_type(
         match tag {
             gimli::DW_TAG_base_type => {
                 desc.kind = match die.encoding {
-                    Some(e) if e == u64::from(gimli::DW_ATE_signed.0)
-                        || e == u64::from(gimli::DW_ATE_signed_char.0) => TypeKind::SignedInteger,
-                    Some(e) if e == u64::from(gimli::DW_ATE_unsigned.0)
-                        || e == u64::from(gimli::DW_ATE_unsigned_char.0)
-                        || e == u64::from(gimli::DW_ATE_address.0) => TypeKind::UnsignedInteger,
+                    Some(e)
+                        if e == u64::from(gimli::DW_ATE_signed.0)
+                            || e == u64::from(gimli::DW_ATE_signed_char.0) =>
+                    {
+                        TypeKind::SignedInteger
+                    }
+                    Some(e)
+                        if e == u64::from(gimli::DW_ATE_unsigned.0)
+                            || e == u64::from(gimli::DW_ATE_unsigned_char.0)
+                            || e == u64::from(gimli::DW_ATE_address.0) =>
+                    {
+                        TypeKind::UnsignedInteger
+                    }
                     Some(e) if e == u64::from(gimli::DW_ATE_float.0) => TypeKind::FloatingPoint,
                     Some(e) if e == u64::from(gimli::DW_ATE_boolean.0) => TypeKind::Boolean,
                     _ => TypeKind::Unknown,
@@ -311,15 +324,19 @@ fn resolve_type(
                 let element = resolve_type(die.type_id, dies, visiting, depth + 1, remaining);
                 desc.element_type = Some(element.name);
                 let mut dimensions = 0_usize;
-                let count = dies.values()
-                    .filter(|child| child.parent == Some(id) && child.tag == gimli::DW_TAG_subrange_type)
+                let count = dies
+                    .values()
+                    .filter(|child| {
+                        child.parent == Some(id) && child.tag == gimli::DW_TAG_subrange_type
+                    })
                     .try_fold(1_u64, |count, child| {
                         dimensions += 1;
                         count.checked_mul(child.count?)
                     });
                 desc.element_count = if dimensions == 0 { None } else { count };
                 if desc.byte_size.is_none() {
-                    desc.byte_size = element.byte_size
+                    desc.byte_size = element
+                        .byte_size
                         .and_then(|width| desc.element_count.and_then(|n| width.checked_mul(n)));
                 }
             }
@@ -329,17 +346,25 @@ fn resolve_type(
                 } else {
                     TypeKind::Structure
                 };
-                let mut members: Vec<_> = dies.values()
+                let mut members: Vec<_> = dies
+                    .values()
                     .filter(|child| child.parent == Some(id) && child.tag == gimli::DW_TAG_member)
                     .collect();
                 members.sort_by_key(|m| m.id);
                 for member in members {
-                    let descriptor = resolve_type(member.type_id, dies, visiting, depth + 1, remaining);
-                    let byte_offset = match (member.member_offset, desc.byte_size, descriptor.byte_size) {
-                        (Some(offset), Some(container_size), Some(member_size))
-                            if offset.checked_add(member_size).is_none_or(|end| end > container_size) => None,
-                        (offset, _, _) => offset,
-                    };
+                    let descriptor =
+                        resolve_type(member.type_id, dies, visiting, depth + 1, remaining);
+                    let byte_offset =
+                        match (member.member_offset, desc.byte_size, descriptor.byte_size) {
+                            (Some(offset), Some(container_size), Some(member_size))
+                                if offset
+                                    .checked_add(member_size)
+                                    .is_none_or(|end| end > container_size) =>
+                            {
+                                None
+                            }
+                            (offset, _, _) => offset,
+                        };
                     desc.members.push(TypeMember {
                         name: member.name.clone().unwrap_or_else(|| "<anonymous>".into()),
                         byte_offset,
@@ -347,9 +372,12 @@ fn resolve_type(
                     });
                 }
             }
-            gimli::DW_TAG_typedef | gimli::DW_TAG_const_type
-                | gimli::DW_TAG_volatile_type | gimli::DW_TAG_restrict_type => {
-                let mut underlying = resolve_type(die.type_id, dies, visiting, depth + 1, remaining);
+            gimli::DW_TAG_typedef
+            | gimli::DW_TAG_const_type
+            | gimli::DW_TAG_volatile_type
+            | gimli::DW_TAG_restrict_type => {
+                let mut underlying =
+                    resolve_type(die.type_id, dies, visiting, depth + 1, remaining);
                 if let Some(alias) = &die.name {
                     underlying.name = alias.clone();
                 }
@@ -386,10 +414,16 @@ pub fn inspect_typed_dwarf(bytes: &[u8]) -> Result<TypedDwarf, MetadataError> {
     let target = TargetInfo {
         architecture: format!("{:?}", file.architecture()),
         elf_address_bytes: if file.is_64() { 8 } else { 4 },
-        endian: if file.is_little_endian() { TargetEndian::Little } else { TargetEndian::Big },
+        endian: if file.is_little_endian() {
+            TargetEndian::Little
+        } else {
+            TargetEndian::Big
+        },
     };
-    let has_debug_info = file.section_by_name(".debug_info")
-        .map(|section| section.size() > 0).unwrap_or(false);
+    let has_debug_info = file
+        .section_by_name(".debug_info")
+        .map(|section| section.size() > 0)
+        .unwrap_or(false);
     let mut result = TypedDwarf {
         target,
         has_debug_info,
@@ -489,7 +523,11 @@ pub fn inspect_typed_dwarf(bytes: &[u8]) -> Result<TypedDwarf, MetadataError> {
             }
             let die = &dies[&id];
             let descriptor = resolve_type(
-                die.type_id, &dies, &mut HashSet::new(), 0, &mut expansion_budget,
+                die.type_id,
+                &dies,
+                &mut HashSet::new(),
+                0,
+                &mut expansion_budget,
             );
             if expansion_budget == 0 {
                 return Err(MetadataError::LimitExceeded);
