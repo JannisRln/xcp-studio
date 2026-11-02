@@ -43,7 +43,11 @@ impl SampleFrame {
             timestamp_ms: ORIGIN_MS + i as u64,
             sequence: i as u64,
             values: [
-                Some(if i.is_multiple_of(683) { 8000.0 } else { 1850.0 }),
+                Some(if i.is_multiple_of(683) {
+                    8000.0
+                } else {
+                    1850.0
+                }),
                 Some(88.5 + (i % 17) as f64 / 10.0),
             ],
             quality: [SampleQuality::Synthetic; 2],
@@ -149,7 +153,8 @@ pub fn nearest_value(
     timestamp_ms: u64,
     channel: usize,
 ) -> Option<f64> {
-    frames.iter()
+    frames
+        .iter()
         .filter(|f| !f.gap_before && f.values[channel].is_some())
         .min_by_key(|f| f.timestamp_ms.abs_diff(timestamp_ms))
         .and_then(|f| f.values[channel])

@@ -28,7 +28,9 @@ pub enum BridgeEvent {
 pub fn valid_acquisition_id(id: &str) -> bool {
     (5..=80).contains(&id.len())
         && id.starts_with("acq-")
-        && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
 /// Only the existing backend broadcast stream is allowed; no HTTP POST, no ECU reads.
@@ -51,7 +53,10 @@ pub fn subscribe(acquisition_id: String) -> Result<Subscription, String> {
     let cancel = Arc::new(AtomicBool::new(false));
     let worker_cancel = Arc::clone(&cancel);
     std::thread::spawn(move || run(acquisition_id, sender, worker_cancel));
-    Ok(Subscription { events: receiver, cancel })
+    Ok(Subscription {
+        events: receiver,
+        cancel,
+    })
 }
 
 fn run(id: String, tx: SyncSender<BridgeEvent>, cancel: Arc<AtomicBool>) {
@@ -66,9 +71,11 @@ fn stream(id: &str, tx: &SyncSender<BridgeEvent>, cancel: &AtomicBool) -> Result
     let address: SocketAddr = SUBSCRIBER_ENDPOINT.parse().map_err(|e| format!("{e}"))?;
     let stream = TcpStream::connect_timeout(&address, Duration::from_secs(2))
         .map_err(|e| format!("loopback backend unavailable: {e}"))?;
-    stream.set_read_timeout(Some(Duration::from_millis(250)))
+    stream
+        .set_read_timeout(Some(Duration::from_millis(250)))
         .map_err(|e| format!("read timeout setup failed: {e}"))?;
-    stream.set_write_timeout(Some(Duration::from_secs(2)))
+    stream
+        .set_write_timeout(Some(Duration::from_secs(2)))
         .map_err(|e| format!("write timeout setup failed: {e}"))?;
 
     let url = format!("ws://{SUBSCRIBER_ENDPOINT}/api/v1/acquisitions/{id}/stream");
@@ -106,7 +113,9 @@ fn stream(id: &str, tx: &SyncSender<BridgeEvent>, cancel: &AtomicBool) -> Result
         if !message.is_text() {
             continue;
         }
-        let text = message.to_text().map_err(|e| format!("invalid WS text: {e}"))?;
+        let text = message
+            .to_text()
+            .map_err(|e| format!("invalid WS text: {e}"))?;
         let event = parse_event(text, id)?;
         if dropped_locally != 0 {
             match tx.try_send(BridgeEvent::Gap(dropped_locally)) {
@@ -143,34 +152,48 @@ pub fn parse_event(payload: &str, acquisition_id: &str) -> Result<BridgeEvent, S
     }
     match root.get("type").and_then(Value::as_str) {
         Some("gap") => {
-            let count = root.get("dropped").and_then(Value::as_u64)
+            let count = root
+                .get("dropped")
+                .and_then(Value::as_u64)
                 .ok_or("invalid subscriber gap")?;
             Ok(BridgeEvent::Gap(count))
         }
         Some("status") => {
-            let state = root.get("state").and_then(Value::as_str)
+            let state = root
+                .get("state")
+                .and_then(Value::as_str)
                 .ok_or("missing acquisition state")?;
             Ok(BridgeEvent::Status(state.chars().take(32).collect()))
         }
         Some("samples") => {
-            let timestamp_ms = root.get("timestamp_ms").and_then(Value::as_u64)
+            let timestamp_ms = root
+                .get("timestamp_ms")
+                .and_then(Value::as_u64)
                 .ok_or("missing host timestamp")?;
-            let sequence = root.get("sequence").and_then(Value::as_u64)
+            let sequence = root
+                .get("sequence")
+                .and_then(Value::as_u64)
                 .ok_or("missing sequence")?;
-            let samples = root.get("samples").and_then(Value::as_array)
+            let samples = root
+                .get("samples")
+                .and_then(Value::as_array)
                 .ok_or("missing sample array")?;
             let mut values = [None, None];
             let mut quality = [SampleQuality::Missing; 2];
             let mut names = ["Signal A (raw)".to_string(), "Signal B (raw)".to_string()];
             for (i, sample) in samples.iter().take(2).enumerate() {
-                let name = sample.get("name").and_then(Value::as_str)
+                let name = sample
+                    .get("name")
+                    .and_then(Value::as_str)
                     .ok_or("missing sample name")?;
                 if name.is_empty() || name.len() > 128 {
                     return Err("invalid sample name".into());
                 }
                 names[i] = name.to_owned();
                 let wire_quality = sample.get("quality").and_then(Value::as_str);
-                let finite = sample.get("value").and_then(Value::as_f64)
+                let finite = sample
+                    .get("value")
+                    .and_then(Value::as_f64)
                     .filter(|v| v.is_finite());
                 quality[i] = match (wire_quality, finite) {
                     (Some("valid"), Some(_)) => SampleQuality::DecodedValid,
@@ -182,9 +205,16 @@ pub fn parse_event(payload: &str, acquisition_id: &str) -> Result<BridgeEvent, S
                     values[i] = finite;
                 }
             }
-            Ok(BridgeEvent::Frame(SampleFrame {
-                timestamp_ms, sequence, values, quality, gap_before: false,
-            }, names))
+            Ok(BridgeEvent::Frame(
+                SampleFrame {
+                    timestamp_ms,
+                    sequence,
+                    values,
+                    quality,
+                    gap_before: false,
+                },
+                names,
+            ))
         }
         _ => Err("unsupported acquisition event".into()),
     }
@@ -222,8 +252,9 @@ mod tests {
     fn checked_quality_is_not_physical_quality() {
         let data = include_str!("../../../contracts/v1/acquisition-sample-qualified.json");
         match parse_event(data, "acq-1").unwrap() {
-            BridgeEvent::Frame(frame, _) =>
-                assert_eq!(frame.quality[0], SampleQuality::DecodedValid),
+            BridgeEvent::Frame(frame, _) => {
+                assert_eq!(frame.quality[0], SampleQuality::DecodedValid)
+            }
             _ => panic!("expected numeric sample"),
         }
     }
@@ -237,7 +268,7 @@ mod tests {
             BridgeEvent::Frame(f, _) => {
                 assert_eq!(f.values[0], None);
                 assert_eq!(f.quality[0], SampleQuality::Invalid);
-            },
+            }
             _ => panic!("expected frame"),
         }
     }

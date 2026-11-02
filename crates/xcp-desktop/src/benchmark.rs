@@ -52,7 +52,12 @@ impl BenchRun {
         self.queued_probe = Some(Instant::now());
     }
 
-    pub fn step(&mut self, frame_start: Instant, cpu_update: Duration, prior_eframe_cpu_seconds: Option<f32>) -> bool {
+    pub fn step(
+        &mut self,
+        frame_start: Instant,
+        cpu_update: Duration,
+        prior_eframe_cpu_seconds: Option<f32>,
+    ) -> bool {
         if let Some(last) = self.last_frame {
             self.intervals_ms
                 .push(frame_start.duration_since(last).as_secs_f64() * 1_000.0);
@@ -60,8 +65,12 @@ impl BenchRun {
         self.last_frame = Some(frame_start);
         // Non-blocking drain: the UI cannot wait on a worker or an ECU.
         while let Ok(sent_at) = self.worker_probe.try_recv() {
-            self.worker_dispatch_to_ui_ms
-                .push(Instant::now().saturating_duration_since(sent_at).as_secs_f64() * 1_000.0);
+            self.worker_dispatch_to_ui_ms.push(
+                Instant::now()
+                    .saturating_duration_since(sent_at)
+                    .as_secs_f64()
+                    * 1_000.0,
+            );
         }
         if let Some(clicked) = self.queued_probe {
             if frame_start >= clicked {
@@ -71,7 +80,8 @@ impl BenchRun {
             }
         }
         if let Some(seconds) = prior_eframe_cpu_seconds.filter(|s| s.is_finite() && *s >= 0.0) {
-            self.prior_frame_render_cpu_ms.push(f64::from(seconds) * 1_000.0);
+            self.prior_frame_render_cpu_ms
+                .push(f64::from(seconds) * 1_000.0);
         }
         self.update_ms.push(cpu_update.as_secs_f64() * 1_000.0);
         self.update_ms.len() >= ITERATIONS
@@ -163,7 +173,10 @@ mod tests {
     fn completes_at_80_recorded_ui_updates() {
         let mut run = BenchRun::new(2_000);
         for i in 0..80 {
-            assert_eq!(run.step(Instant::now(), Duration::from_millis(2), Some(0.003)), i == 79);
+            assert_eq!(
+                run.step(Instant::now(), Duration::from_millis(2), Some(0.003)),
+                i == 79
+            );
         }
         assert_eq!(run.report()["updates"], 80);
         assert_eq!(run.report()["series"], 2);

@@ -63,7 +63,12 @@ struct DesktopApp {
 }
 
 impl DesktopApp {
-    fn new(cc: &eframe::CreationContext<'_>, acquisition_id: Option<String>, auto_bench: bool, screenshot_path: Option<PathBuf>) -> Self {
+    fn new(
+        cc: &eframe::CreationContext<'_>,
+        acquisition_id: Option<String>,
+        auto_bench: bool,
+        screenshot_path: Option<PathBuf>,
+    ) -> Self {
         // A light shell matches egui_dock's default panes and keeps the title
         // and toolbar readable on Windows in the default theme.
         cc.egui_ctx.set_visuals(egui::Visuals::light());
@@ -72,7 +77,8 @@ impl DesktopApp {
         // dragged, resized, tabbed, or detached by egui_dock.
         let mut dock = DockState::new(vec![Pane::Speed]);
         let [left, right] =
-            dock.main_surface_mut().split_right(NodeIndex::root(), 0.52, vec![Pane::Temperature]);
+            dock.main_surface_mut()
+                .split_right(NodeIndex::root(), 0.52, vec![Pane::Temperature]);
         dock.main_surface_mut()
             .split_below(left, 0.68, vec![Pane::Signals, Pane::Benchmark]);
         dock.main_surface_mut()
@@ -80,12 +86,18 @@ impl DesktopApp {
 
         let (receiver, source, status) = match acquisition_id {
             Some(id) => match bridge::subscribe(id.clone()) {
-                Ok(rx) => (Some(rx), Source::BackendSubscriber,
-                    format!("WAITING - subscribing to existing {id} (read-only)")),
+                Ok(rx) => (
+                    Some(rx),
+                    Source::BackendSubscriber,
+                    format!("WAITING - subscribing to existing {id} (read-only)"),
+                ),
                 Err(error) => (None, Source::BackendSubscriber, format!("ERROR - {error}")),
             },
-            None => (None, Source::Synthetic,
-                "SYNTHETIC FIXTURE - no ECU session, no hardware".to_owned()),
+            None => (
+                None,
+                Source::Synthetic,
+                "SYNTHETIC FIXTURE - no ECU session, no hardware".to_owned(),
+            ),
         };
         let active_bench = auto_bench && source == Source::Synthetic;
         Self {
@@ -100,7 +112,10 @@ impl DesktopApp {
             signal_names: if source == Source::Synthetic {
                 ["Fixture RPM".into(), "Fixture °C".into()]
             } else {
-                ["Acquisition signal A (raw)".into(), "Acquisition signal B (raw)".into()]
+                [
+                    "Acquisition signal A (raw)".into(),
+                    "Acquisition signal B (raw)".into(),
+                ]
             },
             visible: [true, true],
             cursors: [None, None],
@@ -160,12 +175,13 @@ impl DesktopApp {
                         self.subscriber_gaps = self.subscriber_gaps.saturating_add(1);
                         continue;
                     }
-                    let skipped = self.last_sequence.is_some_and(|seq| {
-                        frame.sequence != seq.saturating_add(1)
-                    });
-                    let clock_regressed = self.frames.back().is_some_and(|last| {
-                        frame.timestamp_ms < last.timestamp_ms
-                    });
+                    let skipped = self
+                        .last_sequence
+                        .is_some_and(|seq| frame.sequence != seq.saturating_add(1));
+                    let clock_regressed = self
+                        .frames
+                        .back()
+                        .is_some_and(|last| frame.timestamp_ms < last.timestamp_ms);
                     frame.gap_before = self.pending_gap || skipped || clock_regressed;
                     if skipped || clock_regressed {
                         self.subscriber_gaps = self.subscriber_gaps.saturating_add(1);
@@ -211,7 +227,9 @@ impl DesktopApp {
             return "SYNTHETIC - NOT ECU DATA".into();
         }
         if self.stream_status.starts_with("LIVE")
-            && self.latest_receipt.is_some_and(|t| t.elapsed() > Duration::from_secs(2))
+            && self
+                .latest_receipt
+                .is_some_and(|t| t.elapsed() > Duration::from_secs(2))
         {
             return "STALE - no new backend samples for >2s".into();
         }
@@ -262,7 +280,11 @@ impl DesktopApp {
                 if ui.button("Probe UI response").clicked() {
                     bench.record_click();
                 }
-                ui.label(format!("Trial: {} frames · {}/80", bench.size, bench.updates()));
+                ui.label(format!(
+                    "Trial: {} frames · {}/80",
+                    bench.size,
+                    bench.updates()
+                ));
             }
         });
         ui.separator();
@@ -291,7 +313,11 @@ impl Panels<'_> {
             Color32::from_rgb(247, 198, 126)
         };
         let unit = if self.source == Source::Synthetic {
-            if channel == 0 { "rpm" } else { "°C" }
+            if channel == 0 {
+                "rpm"
+            } else {
+                "°C"
+            }
         } else {
             "raw - unconverted"
         };
@@ -306,7 +332,8 @@ impl Panels<'_> {
         }
 
         let segments = chart_segments(self.frames, channel, PLOT_LIMIT);
-        let gaps: Vec<f64> = self.frames
+        let gaps: Vec<f64> = self
+            .frames
             .iter()
             .rev()
             .filter(|f| f.gap_before)
@@ -343,10 +370,16 @@ impl Panels<'_> {
                 for (i, time) in self.cursors.iter().enumerate() {
                     if let Some(time) = time {
                         plot_ui.vline(
-                            VLine::new(if i == 0 { "Cursor A" } else { "Cursor B" },
-                                *time as f64 - ORIGIN_MS as f64)
-                                .color(if i == 0 { Color32::YELLOW } else { Color32::LIGHT_BLUE })
-                                .width(2.0),
+                            VLine::new(
+                                if i == 0 { "Cursor A" } else { "Cursor B" },
+                                *time as f64 - ORIGIN_MS as f64,
+                            )
+                            .color(if i == 0 {
+                                Color32::YELLOW
+                            } else {
+                                Color32::LIGHT_BLUE
+                            })
+                            .width(2.0),
                         );
                     }
                 }
@@ -355,9 +388,11 @@ impl Panels<'_> {
                         let x = pointer.x + ORIGIN_MS as f64;
                         if x.is_finite() && x >= 0.0 {
                             let target = x as u64;
-                            if let Some(closest) = self.frames.iter().min_by_key(|frame| {
-                                frame.timestamp_ms.abs_diff(target)
-                            }) {
+                            if let Some(closest) = self
+                                .frames
+                                .iter()
+                                .min_by_key(|frame| frame.timestamp_ms.abs_diff(target))
+                            {
                                 self.cursors[*self.next_cursor] = Some(closest.timestamp_ms);
                                 *self.next_cursor = 1 - *self.next_cursor;
                             }
@@ -370,23 +405,36 @@ impl Panels<'_> {
 
     fn cursor_summary(&self, ui: &mut egui::Ui, channel: usize) {
         ui.horizontal_wrapped(|ui| {
-            ui.label(format!("Next cursor: {}", if *self.next_cursor == 0 { "A" } else { "B" }));
+            ui.label(format!(
+                "Next cursor: {}",
+                if *self.next_cursor == 0 { "A" } else { "B" }
+            ));
             let [a, b] = *self.cursors;
             if let Some(a) = a {
-                ui.label(format!("A: {a} ms / {:?}", nearest_value(self.frames, a, channel)));
+                ui.label(format!(
+                    "A: {a} ms / {:?}",
+                    nearest_value(self.frames, a, channel)
+                ));
             }
             if let Some(b) = b {
-                ui.label(format!("B: {b} ms / {:?}", nearest_value(self.frames, b, channel)));
+                ui.label(format!(
+                    "B: {b} ms / {:?}",
+                    nearest_value(self.frames, b, channel)
+                ));
             }
             if let (Some(a), Some(b)) = (a, b) {
                 let dt = a.abs_diff(b);
                 let va = nearest_value(self.frames, a, channel);
                 let vb = nearest_value(self.frames, b, channel);
-                ui.label(format!("|Δt|: {dt} ms; ΔY: {:?}; Hz: {}",
+                ui.label(format!(
+                    "|Δt|: {dt} ms; ΔY: {:?}; Hz: {}",
                     va.zip(vb).map(|(x, y)| y - x),
-                    if dt == 0 { "n/a".to_owned() } else {
+                    if dt == 0 {
+                        "n/a".to_owned()
+                    } else {
                         format!("{:.3}", 1000.0 / dt as f64)
-                    }));
+                    }
+                ));
             }
         });
     }
@@ -394,39 +442,60 @@ impl Panels<'_> {
     fn signal_table(&mut self, ui: &mut egui::Ui) {
         ui.heading("Signal legend & latest values");
         ui.label("Raw snapshots only. No unverified physical conversion or ECU quality guarantee.");
-        egui::Grid::new("signal-table").striped(true).show(ui, |ui| {
-            ui.strong("Show");
-            ui.strong("Signal");
-            ui.strong("Last value");
-            ui.strong("Quality");
-            ui.strong("Origin");
-            ui.end_row();
-            for i in 0..2 {
-                ui.checkbox(&mut self.visible[i], "");
-                ui.label(&self.signal_names[i]);
-                ui.label(match self.frames.back().and_then(|f| f.values[i]) {
-                    Some(v) => format!("{v:.3}"),
-                    None => "MISSING".into(),
-                });
-                let q = self.frames.back()
-                    .map(|frame| frame.quality[i].label()).unwrap_or("WAITING");
-                let color = if q == "VALID (decoded)" { Color32::LIGHT_GREEN }
-                    else if q == "INVALID" || q == "MISSING" { Color32::LIGHT_RED }
-                    else { Color32::YELLOW };
-                ui.colored_label(color, q);
-                ui.label(if self.source == Source::Synthetic { "synthetic" } else { "backend raw" });
+        egui::Grid::new("signal-table")
+            .striped(true)
+            .show(ui, |ui| {
+                ui.strong("Show");
+                ui.strong("Signal");
+                ui.strong("Last value");
+                ui.strong("Quality");
+                ui.strong("Origin");
                 ui.end_row();
-            }
-        });
-        ui.label(format!("Received frames in visualization: {}", self.frames.len()));
+                for i in 0..2 {
+                    ui.checkbox(&mut self.visible[i], "");
+                    ui.label(&self.signal_names[i]);
+                    ui.label(match self.frames.back().and_then(|f| f.values[i]) {
+                        Some(v) => format!("{v:.3}"),
+                        None => "MISSING".into(),
+                    });
+                    let q = self
+                        .frames
+                        .back()
+                        .map(|frame| frame.quality[i].label())
+                        .unwrap_or("WAITING");
+                    let color = if q == "VALID (decoded)" {
+                        Color32::LIGHT_GREEN
+                    } else if q == "INVALID" || q == "MISSING" {
+                        Color32::LIGHT_RED
+                    } else {
+                        Color32::YELLOW
+                    };
+                    ui.colored_label(color, q);
+                    ui.label(if self.source == Source::Synthetic {
+                        "synthetic"
+                    } else {
+                        "backend raw"
+                    });
+                    ui.end_row();
+                }
+            });
+        ui.label(format!(
+            "Received frames in visualization: {}",
+            self.frames.len()
+        ));
     }
 
     fn status_panel(&self, ui: &mut egui::Ui) {
         ui.heading("Acquisition & visualization status");
         ui.label(self.status);
-        ui.label(format!("Subscriber/sequence gaps observed: {}", self.subscriber_gaps));
-        ui.label(format!("Visible discontinuities: {}",
-            self.frames.iter().filter(|f| f.gap_before).count()));
+        ui.label(format!(
+            "Subscriber/sequence gaps observed: {}",
+            self.subscriber_gaps
+        ));
+        ui.label(format!(
+            "Visible discontinuities: {}",
+            self.frames.iter().filter(|f| f.gap_before).count()
+        ));
         ui.label("Gap events represent subscriber/UI loss, not proven ECU loss.");
         ui.label("Native viewer is read-only; connection and sampling remain owned by xcp-server.");
         ui.label("Samples are timestamped after sequential backend reads, not ECU-synchronized.");
@@ -561,7 +630,9 @@ impl eframe::App for DesktopApp {
                     image::ColorType::Rgba8,
                     image::ImageFormat::Png,
                 )
-                .and_then(|()| std::fs::rename(&partial, &path).map_err(image::ImageError::IoError));
+                .and_then(|()| {
+                    std::fs::rename(&partial, &path).map_err(image::ImageError::IoError)
+                });
                 if let Err(error) = result {
                     eprintln!("Native renderer screenshot failed: {error}");
                     let _ = std::fs::remove_file(&partial);
@@ -574,9 +645,8 @@ impl eframe::App for DesktopApp {
             && (self.source == Source::Synthetic || !self.frames.is_empty())
             && (self.benchmark.is_none() || self.benchmark_completed)
         {
-            ui.ctx().send_viewport_cmd(
-                egui::ViewportCommand::Screenshot(egui::UserData::default()),
-            );
+            ui.ctx()
+                .send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
             self.screenshot_requested = true;
         }
         ui.ctx().request_repaint_after(REPAINT_DELAY);
@@ -608,6 +678,13 @@ fn main() -> eframe::Result {
                 .with_min_inner_size([760.0, 520.0]),
             ..Default::default()
         },
-        Box::new(move |cc| Ok(Box::new(DesktopApp::new(cc, acquisition_id, auto_bench, screenshot_path)))),
+        Box::new(move |cc| {
+            Ok(Box::new(DesktopApp::new(
+                cc,
+                acquisition_id,
+                auto_bench,
+                screenshot_path,
+            )))
+        }),
     )
 }
