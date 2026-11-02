@@ -71,4 +71,11 @@ pub mod elf;
 
 pub mod metadata;
 
+/// Bounded and identity-aware runtime pointer resolution core.
+pub mod ecu;
+
+/// Simulator-scoped calibration preview, validation and verification core.
 pub mod calibration;
+
+/// Read-only A2L metadata import, conversion and comparison.
+pub mod a2l;

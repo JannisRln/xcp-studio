@@ -1,11 +1,11 @@
 ---
 id: T-0003
 title: Typed ELF/DWARF metadata and location provenance
-status: review
+status: ready
 priority: P0
 area: ecu-metadata
-owner: chatgpt-ecu-metadata
-branch: feature/T-0003-typed-dwarf-metadata
+owner: unassigned
+branch: none
 github_issue: 6
 depends_on: []
 requirements: [ECU-001, ECU-002, ECU-003, ECU-004, ECU-005, ECU-006, ECU-008, ECU-010]
@@ -63,3 +63,9 @@ ELF symbol inspection and a DWARF compilation-unit summary exist; the typed vari
 - Windows CI evidence: [run #41308853282](https://github.com/JannisRln/xcp-studio/actions/runs/41308853282) — rust (fmt/Clippy/tests), frontend and docs passed at that commit.
 - Unit tests: `metadata::tests` validate malformed input, member offsets, recursive aliases and array overflow. Integration tests: `tests/dwarf_metadata.rs` validate GCC-compiled, linked DWARF 4 type/members/pointers/array, stripped ELF, and explicit rejection of unrelocated `.o` debug sections; CI results pending. Type expansion is capped to bound pathological metadata.
 - Known limitations: read-only crate API, no public REST schema change, unresolved static/runtime mapping, no arbitrary expression execution, no cross-unit type resolution, and no ECU pointer dereference. Member locations requiring expressions are marked unknown.
+
+## Post-merge integration reconciliation — 2026-11-01
+
+- Merged consolidation [PR #45](https://github.com/JannisRln/xcp-studio/pull/45), main commit `a5db7f3e2a130970f89a4515f9ba4d9dfabc0deb`; integrates the bounded typed DWARF work from #36 and #41. Main CI [41323484200](https://github.com/JannisRln/xcp-studio/actions/runs/41323484200) and latest main CI [41324320683](https://github.com/JannisRln/xcp-studio/actions/runs/41324320683) succeeded.
+- The previous review branch/owner are historical, not an active claim. Return the **remaining ticket scope to READY**, not DONE. No runtime relocations, location-list execution, public metadata DTO approval, or complete target-architecture matrix have been accepted.
+- T-0014 may build an isolated bounded runtime-pointer core without declaring runtime link-time addresses valid; do not silently modify shared metadata interfaces.

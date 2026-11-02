@@ -64,3 +64,20 @@ The original table above is a historical baseline. The following merged PRs are 
 **Important distinction:** The original `/api/xcp/stream` remains for compatibility and still creates an independent polling loop for each client. The updated GUI uses `/api/v1/acquisitions/{id}/stream`, which subscribes to a shared backend acquisition instead. The backend-owned service is **not** ECU DAQ. Closing the GUI does not stop acquisition; browser CSV is limited to the retained 2,000-frame preview.
 
 The source-controlled ticket index now returns unclaimed remaining scope to READY or BLOCKED after completion of the merged phases. A deleted branch does not remain an active ticket owner. Consult [ticket index](tickets/INDEX.md) and [agent workflow](agent-workflow.md) before launching parallel agents.
+
+## Reconciled merged implementation — 2026-11-01 (main `ee793a861`)
+
+This section supersedes only **later status** assumptions in the historical baseline above; original dated baseline rows are retained for audit.
+
+| Area | Merged evidence | Confirmed narrow result | Explicitly still missing |
+| --- | --- | --- | --- |
+| T-0002 symbol browser | [PR #39](https://github.com/JannisRln/xcp-studio/pull/39) | Explicit manual runtime address/type entry, bounded paging, keyboard and invalid-input tests; no link-time promotion | Real-browser keyboard E2E, verified runtime identity |
+| T-0004 XCP session | [PR #40](https://github.com/JannisRln/xcp-studio/pull/40) | Bounded actor commands/deadlines, explicit fault/recovery and mock negative-response tests | In-flight vendor-driver cancellation, capability matrix, HIL |
+| T-0013 safety | [PR #42](https://github.com/JannisRln/xcp-studio/pull/42) | Bounded local HTTP/WS resources; fail-closed ECU memory writes | Live stress/slow-client tests, remote authentication, diagnostic redaction export |
+| T-0006 Live View | [PR #43](https://github.com/JannisRln/xcp-studio/pull/43), [#44](https://github.com/JannisRln/xcp-studio/pull/44) | One uPlot Canvas view, A/B cursor, zoom/pan, chart windows, bounded preview and Windows real simulator/Vite/WS/React E2E | Measured performance across environments, export-click E2E, recording/DAQ |
+| T-0003 metadata | [PR #45](https://github.com/JannisRln/xcp-studio/pull/45) | Bounded typed DWARF metadata, aggregate/member/array fixtures and link-time provenance | Runtime pointer dereference, relocation/identity validation, location-list coverage |
+| T-0012 contracts | [PR #46](https://github.com/JannisRln/xcp-studio/pull/46) | Optional v1 quality/type/address-origin and timestamp/gap-origin fields in Rust/TS with cross-language fixtures | Independent T-0005/T-0006 owner acceptance, actual ECU DAQ quality/timebase semantics |
+
+**Main CI evidence:** [41324320683](https://github.com/JannisRln/xcp-studio/actions/runs/41324320683) succeeded for Rust, frontend, docs and real Live View E2E on main commit `ee793a86119049f4400afc18193b4bd2135a1d44`. [GitHub Pages deployment 41324320625](https://github.com/JannisRln/xcp-studio/actions/runs/41324320625) succeeded, but deployment alone is not a physical ECU or hardware validation.
+
+**Unresolved governance:** GitHub reports `main.protected=false` and zero repository rulesets at this check; T-0001 is BLOCKED pending administrator configuration and negative enforcement proof. PR #46 was merged without separately recorded T-0005/T-0006 owner sign-off; T-0012 is BLOCKED for independent contract acceptance. See [integration review](integration-review-2026-11-01.md).
