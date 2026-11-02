@@ -20,7 +20,7 @@ Every automated test needs reproducible input and expected output. Hardware benc
 ## 2. Current CI versus target gates
 
 **CI configuration delivered by T-0001 after this PR merges:**
-- Rust Windows runner: cargo fmt --all in a temporary runner, then cargo fmt --all -- --check, cargo clippy --workspace --all-targets -- -D warnings, and cargo test --workspace.
+- Rust Windows runner: `cargo fmt --all -- --check` on the committed checkout **without prior autoformatting**, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace`. A formatting failure must fail required CI.
 - Frontend Windows runner: npm ci with a committed lockfile, npm run build and npm test.
 - Documentation Windows runner: python scripts/check_docs.py, validating frontmatter, index, requirement mappings, dependencies and links.
 - Existing workflow triggers pull_request and push to main. Branch-cleanup maintenance workflow runs on main pushes and removes only verified merged source branches.
@@ -28,7 +28,7 @@ Every automated test needs reproducible input and expected output. Hardware benc
 **Separate repository administration and later work:**
 - Enable required checks for rust/frontend/docs and PR review in GitHub's ruleset for main; [branch-protection.md](branch-protection.md) documents these steps. CI jobs by themselves do not establish that the ruleset is active.
 - Add browser/server simulator E2E and hardware bench evidence as later milestone work.
-- Formatting policy: CI runner autoformat does not rewrite commits; local hook checks formatting.
+- Formatting policy: CI checks committed sources directly without autoformatting; the local hook also checks formatting.
 
 Useful local commands, when dependencies are installed:
 
