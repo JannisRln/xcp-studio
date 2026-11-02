@@ -8,7 +8,7 @@ owner: chatgpt-agent
 branch: feature/T-0010-versioned-project-core
 github_issue: 13
 depends_on: [T-0002, T-0012]
-requirements: [UI-006, PROJ-001, PROJ-002, PROJ-003, PROJ-004, PROJ-005, PROJ-006, PROJ-007, PROJ-008, PROJ-009, PROJ-010]
+requirements: [UI-006, PROJ-001, PROJ-002, PROJ-003, PROJ-004, PROJ-005, PROJ-006, PROJ-007, PROJ-008, PROJ-009, PROJ-010, PROJ-011]
 ---
 
 # T-0010 — Versioned project files and workspace restoration
@@ -31,6 +31,8 @@ Workspace signal and chart state is not persisted as a versioned project format.
 - [ ] Expose migration dry-run preview and checked-in old→current fixtures; never rewrite unsupported/newer project schemas or lose unknown fields silently.
 - [ ] Distinguish tracked portable configuration from ignored binary recordings, machine-local state, credentials and unsafe persisted runtime ECU authority.
 - [ ] Make multi-file saves crash-safe as a coherent workspace with verified backup/recovery behavior, not merely atomic per-file renames.
+- [ ] Persist every project file reference as a normalized relative path against the **project manifest's parent directory**, including references written in nested entity files; never use process CWD, Git root or executable directory as the base.
+- [ ] Allow explicitly authorized relative `../` ELF/A2L inputs outside the project directory after canonical-path/symlink validation and fingerprint matching; keep project-internal configuration paths confined to the project tree and writeable only through the project transaction.
 
 ## Non-goals
 
@@ -54,6 +56,9 @@ Workspace signal and chart state is not persisted as a versioned project format.
 - [ ] Supported schema migrations are deterministic/idempotent with preview and no source mutation before confirmation; newer/unknown schemas fail safely.
 - [ ] Interrupted or failed multi-file save leaves last verified project recoverable, with a tested disk-full/partial-write case.
 - [ ] Project validation runs offline in CI without connected ECU, and loading/migrating never authorizes memory reads or writes.
+- [ ] Relocating/cloning an unchanged project tree gives identical resolved file targets regardless of current working directory; moving only the manifest reports missing assets rather than silently rebinding them.
+- [ ] Absolute, drive-letter, UNC and URL file references are rejected, internal `../`/symlink escapes are blocked, external relative read-only references require explicit authorization and fingerprint revalidation.
+- [ ] Migrating v1/v2 basename-only references never invents a location; unresolved paths require manual selection and identity verification.
 
 ## Verification plan
 
@@ -61,6 +66,7 @@ Workspace signal and chart state is not persisted as a versioned project format.
 - [ ] Document schema version and compatibility policy.
 - [ ] Golden Git diffs for unchanged/one-entity/multi-branch edits, migration-version matrix and negative conflict fixtures.
 - [ ] Multi-file crash/fault injection and cross-machine ELF/A2L identity reconciliation fixtures.
+- [ ] Manifest-relative path golden fixtures for nested project files, changed CWD, clone/move, `../firmware/*.elf`, traversal/symlink/UNC/absolute rejection and legacy basename-only migration.
 - [ ] Current PR head passes required CI and negative-path tests; distinguish simulator from HIL evidence.
 
 ## Dependencies / handoff
