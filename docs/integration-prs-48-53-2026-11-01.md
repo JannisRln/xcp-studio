@@ -1,4 +1,8 @@
 # Integration readiness review — PRs #48–#53 (2026-11-01)
+ 
+> **Historical report, NOT the current PR/branch status.** Latest verified GitHub ruleset `updated_at=2026-11-02T05:48:38.127+01:00`: repository administration **removed the `pull_request` rule**, but the four Windows checks `rust`, `frontend`, `docs`, `live-view-e2e` are still required (`strict_required_status_checks_policy=false`). On 2026-11-02, #56 was merged into #49's branch, #66 into #61's branch, and #51, #52 and #48 were merged to `main`. Statements below about unmerged work and earlier ruleset settings are dated evidence, **not live release status**. Re-read actual GitHub heads and checks for every later integration.
+
+
 
 **Scope:** feature PRs [#53](https://github.com/JannisRln/xcp-studio/pull/53), [#51](https://github.com/JannisRln/xcp-studio/pull/51), [#52](https://github.com/JannisRln/xcp-studio/pull/52), [#49](https://github.com/JannisRln/xcp-studio/pull/49), [#48](https://github.com/JannisRln/xcp-studio/pull/48), and [#50](https://github.com/JannisRln/xcp-studio/pull/50), in that preferred order. This document records **observed readiness, not a merge or acceptance certificate**. [#55](https://github.com/JannisRln/xcp-studio/pull/55) is explicitly excluded as an experimental native GUI.
 
