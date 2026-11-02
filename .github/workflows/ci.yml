@@ -12,9 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Format Rust workspace in CI runner
-        run: cargo fmt --all
-      - name: Check formatted Rust workspace
+      - name: Check committed Rust formatting (no autoformat)
         run: cargo fmt --all -- --check
       - name: Lint Rust workspace
         run: cargo clippy --workspace --all-targets -- -D warnings
