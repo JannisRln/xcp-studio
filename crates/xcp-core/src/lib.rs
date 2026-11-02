@@ -70,3 +70,7 @@ pub mod pcan;
 pub mod elf;
 
 pub mod metadata;
+
+// CI negative formatting probe. Never merge this temporary branch.
+#[cfg(test)]
+fn rustfmt_gate_negative_probe( ) { }
