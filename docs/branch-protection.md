@@ -63,12 +63,12 @@ Do not claim branch protection has been configured unless the ruleset is confirm
 
 [GitHub repository ruleset Main (ID 26324325)](https://github.com/JannisRln/xcp-studio/rules/26324325) is **active** on \`refs/heads/main\`. It enforces \`deletion\`, \`non_fast_forward\` and \`pull_request\`; no bypass actors are configured.
 
-**Important update:** The API first showed 0 required reviews/no required checks. Concurrent administration updates were re-verified through \`updated_at = 2026-11-01T21:11:31.644+01:00\`. The **current** values are:
+**Important update:** The API first showed 0 required reviews/no required checks. A subsequent live GitHub API check observed \`updated_at = 2026-11-01T21:22:28.285+01:00\`. Earlier approval-count claims are historical; the **latest verified** values are:
 
 | Setting | Current verified GitHub state | Required final state |
 | --- | --- | --- |
 | PR before merge | enabled | keep enabled |
-| Independent approving reviews | \`required_approving_review_count: 1\` | at least 1; ensure reviewer is not the author |
+| Independent approving reviews | **\`required_approving_review_count: 0\` (NOT enforced)** | **at least 1**; require an independent reviewer, not the author |
 | Stale approval dismissal | \`dismiss_stale_reviews_on_push: true\` | keep enabled |
 | Unresolved review threads | \`required_review_thread_resolution: true\` | keep enabled |
 | Required GitHub Actions checks | **all four configured**: \`rust\`, \`frontend\`, \`docs\`, \`live-view-e2e\` (integration ID 15368) | keep all four; negative-test enforcement |
@@ -78,8 +78,8 @@ Do not claim branch protection has been configured unless the ruleset is confirm
 
 **Remaining repository administrator actions (manual):**
 
-1. Open **Settings → Rules → Rulesets → Main**. Confirm that all four required GitHub Actions checks already exist; do not add the branch-pruning maintenance workflow as a PR check.
+1. Open **Settings → Rules → Rulesets → Main**. Set required approving reviews from **0 to at least 1**, preserving stale-review dismissal and required thread resolution. Confirm the four GitHub Actions checks; do not add the branch-pruning maintenance workflow.
 2. Enable **Require branches to be up to date before merging** (\`strict_required_status_checks_policy: true\`) or an equivalent merge-queue policy that actually runs on the current merge candidate.
 3. Save and verify the live \`GET /repos/JannisRln/xcp-studio/rulesets/26324325\` JSON, including all **four** required check names and freshness policy. Perform a non-bypassed test PR with a failing \`docs\` job, missing independent approval, or unresolved security thread and verify GitHub rejects merging.
 
-The connected GitHub App can READ this ruleset but does not expose an administrative mutation action; **this documentation change has not altered enforcement**. Current checks/approval enforcement now includes all four jobs, but the release gate remains blocked by merge-candidate freshness and missing independent approvals on the six feature PRs. Keep [issue #4](https://github.com/JannisRln/xcp-studio/issues/4) open until these gaps and their negative tests are verified. [PR #56](https://github.com/JannisRln/xcp-studio/pull/56) also requires an independent security review and follow-up #49 CI.
+The connected GitHub App can READ this ruleset but does not expose an administrative mutation action; **this documentation change has not altered enforcement**. Current checks enforcement includes all four jobs, but **no review approval is required** by this ruleset; the release gate remains blocked by missing mandatory independent approval, merge-candidate freshness and the absence of independent approvals on the feature PRs. Keep [issue #4](https://github.com/JannisRln/xcp-studio/issues/4) open until these gaps and their negative tests are verified. [PR #56](https://github.com/JannisRln/xcp-studio/pull/56) also requires an independent security review and follow-up #49 CI.
