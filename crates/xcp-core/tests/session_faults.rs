@@ -136,13 +136,22 @@ fn expired_queued_write_is_never_dispatched_after_inflight_timeout() {
     assert!(entered.load(Ordering::Acquire));
 
     let writer = session.clone().with_timeout(Duration::from_millis(15));
-    assert!(matches!(writer.write(0x1020, &[0xaa]), Err(SessionError::Xcp(XcpError::DeadlineExceeded))));
-    assert!(matches!(reader.join().unwrap(), Err(SessionError::Xcp(XcpError::DeadlineExceeded))));
+    assert!(matches!(
+        writer.write(0x1020, &[0xaa]),
+        Err(SessionError::Xcp(XcpError::DeadlineExceeded))
+    ));
+    assert!(matches!(
+        reader.join().unwrap(),
+        Err(SessionError::Xcp(XcpError::DeadlineExceeded))
+    ));
     assert_eq!(session.state().unwrap(), SessionState::Faulted);
     drop(actor);
 
     let commands = commands.lock().unwrap();
-    assert!(!commands.contains(&DOWNLOAD), "expired write reached transport");
+    assert!(
+        !commands.contains(&DOWNLOAD),
+        "expired write reached transport"
+    );
 }
 
 struct StaleUpload {
@@ -194,7 +203,10 @@ fn explicit_reconnect_drains_late_reply_after_no_response_fault() {
         Err(SessionError::Xcp(XcpError::NoResponse))
     ));
     assert_eq!(session.state().unwrap(), SessionState::Faulted);
-    assert!(matches!(session.read(0x1000, 1), Err(SessionError::Faulted)));
+    assert!(matches!(
+        session.read(0x1000, 1),
+        Err(SessionError::Faulted)
+    ));
 
     // An old UPLOAD positive response has no CONNECT capability payload.
     // Without draining it, this CONNECT would be incorrectly consumed.
@@ -241,10 +253,15 @@ fn transport_disconnect_faults_io_and_requires_reconnect() {
     session.connect().unwrap();
     assert!(matches!(
         session.read(0x1000, 1),
-        Err(SessionError::Xcp(XcpError::Transport(TransportError::Disconnected)))
+        Err(SessionError::Xcp(XcpError::Transport(
+            TransportError::Disconnected
+        )))
     ));
     assert_eq!(session.state().unwrap(), SessionState::Faulted);
-    assert!(matches!(session.write(0x1000, &[1]), Err(SessionError::Faulted)));
+    assert!(matches!(
+        session.write(0x1000, &[1]),
+        Err(SessionError::Faulted)
+    ));
     // A response to the failed upload may still be buffered. Explicit
     // DISCONNECT must discard it before treating a new ACK as definitive.
     session.disconnect().unwrap();
@@ -359,7 +376,10 @@ fn incompatible_negotiated_byte_order_fails_before_memory_io() {
         Err(SessionError::Xcp(XcpError::UnsupportedCapabilities))
     ));
     assert_eq!(session.state().unwrap(), SessionState::Faulted);
-    assert!(matches!(session.read(0x1000, 1), Err(SessionError::Faulted)));
+    assert!(matches!(
+        session.read(0x1000, 1),
+        Err(SessionError::Faulted)
+    ));
 }
 
 #[test]
@@ -373,13 +393,17 @@ fn reconnect_requires_explicit_operator_action_after_timeout() {
             Ok(None)
         }
     }
-    let actor = SessionActor::spawn(XcpMaster::new(Silent, CanIds::default())
-        .with_response_timeout(Duration::from_millis(20)));
+    let actor = SessionActor::spawn(
+        XcpMaster::new(Silent, CanIds::default()).with_response_timeout(Duration::from_millis(20)),
+    );
     let session = actor.handle();
     assert!(matches!(
         session.connect(),
         Err(SessionError::Xcp(XcpError::NoResponse))
     ));
     assert_eq!(session.state().unwrap(), SessionState::Faulted);
-    assert!(matches!(session.read(0x1000, 1), Err(SessionError::Faulted)));
+    assert!(matches!(
+        session.read(0x1000, 1),
+        Err(SessionError::Faulted)
+    ));
 }

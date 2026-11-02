@@ -1,11 +1,11 @@
 ---
 id: T-0010
 title: Versioned project files and workspace restoration
-status: blocked
+status: in-progress
 priority: P0
 area: projects
-owner: unassigned
-branch: none
+owner: chatgpt-agent
+branch: feature/T-0010-versioned-project-core
 github_issue: 13
 depends_on: [T-0002, T-0012]
 requirements: [UI-006, PROJ-001, PROJ-002, PROJ-003, PROJ-004, PROJ-005, PROJ-006, PROJ-007, PROJ-008, PROJ-009, PROJ-010]
@@ -41,7 +41,7 @@ Workspace signal and chart state is not persisted as a versioned project format.
 
 - crates/xcp-server/src/services/projects/, frontend/src/features/projects/ and versioned test fixtures.
 - Shared DTO/schema definitions coordinated with T-0012.
-- Existing unmerged PR #51 implements a bounded single-file v2 JSON core. Preserve its import/export and safe v1→v2 migration; agree on any new canonical directory format and new version with the owner before implementation. Documentation revisions must be reconciled additively with PR #51's ticket/index edits.
+- Merged core PR #51 implements a bounded single-file v2 JSON core. Preserve its import/export and safe v1→v2 migration; agree on any new canonical directory format and new version with the owner before implementation. This ticket reconciles the accepted core phase with proposed Git-native next steps.
 
 ## Acceptance criteria
 
@@ -70,9 +70,17 @@ Workspace signal and chart state is not persisted as a versioned project format.
 - Changes to shared interfaces require contract-first coordination and an ADR if architecture changes.
 - Agent must claim ownership in this ticket and update INDEX.md before overlapping code edits.
 
+## Isolated core phase (this branch)
+
+- Branch owner: chatgpt-agent; project-file core under `frontend/src/features/projects/`.
+- Added v2 JSON model and strict import/export, explicit v1-to-v2 in-memory migration, size and secret-key rejection, file-fingerprint reconciliation and Vitest cases.
+- Dependency status: T-0012 is only partially implemented; do not integrate shared DTOs or AppShell until contract coordination.
+- **Not implemented:** atomic durable saves, project UI workflow, browser E2E reopen, real ECU source verification and server-backed restoration.
+- Requirement completion remains blocked on integration, CI and fault-injection evidence; this is not full T-0010 acceptance.
+
 ## Evidence and completion
 
-- Implementation PR / commit: pending.
-- CI workflow/head SHA: pending.
-- Test/fixture evidence: pending.
-- Known limitations and follow-ups: pending.
+- Implementation PR: [PR #51](https://github.com/JannisRln/xcp-studio/pull/51); branch `feature/T-0010-versioned-project-core`.
+- CI evidence: [Windows CI run 41328861453](https://github.com/JannisRln/xcp-studio/actions/runs/41328861453) succeeded on code head `e5e4584bdafc1f29bc6e301e626c45eb2e66453f` (frontend, docs, Rust, live-view-e2e). The narrow core phase is merged into `main`; full Git-native persistence acceptance remains outstanding.
+- Test/fixture evidence: `frontend/src/features/projects/projectFormat.test.ts` (roundtrip, legacy migration, corrupt/newer versions, missing/stale/duplicate ECU identity, secret/unknown fields, bounded File import/export).
+- Known limitations and follow-ups: durable atomic save/write fault tests, AppShell/project picker and browser E2E reopen, real file fingerprint verification, session/read safety integration. T-0012 coordination required.

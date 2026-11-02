@@ -51,7 +51,7 @@ PR #51 provides an isolated, strictly validated, deterministically serialized JS
 
 The format and migration tooling become a **P0 product-quality gate**. The proposed directory layout adds validator, migration, save transaction and portability work. This is intentional: useful Git history, reviewability and long-lived compatibility are differentiating product behavior. Do not delay basic Live View correctness to implement Git remote features; ship a minimal canonical project lifecycle with tested migrations and safe fallback.
 
-Changing the proposed layout must be explicit in a reviewed ADR update. PR #51 remains isolated and is **not superseded or merged** by this documentation decision.
+Changing the proposed layout must be explicit in a reviewed ADR update. The merged isolated core from PR #51 is **not superseded** by this documentation decision; the proposed canonical multi-file layout is not implemented or accepted.
 
 ## Migration strategy
 
