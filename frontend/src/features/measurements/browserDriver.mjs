@@ -115,12 +115,12 @@ export async function openBrowser(url, downloadDirectory) {
       if (message.error) entry.reject(new Error(entry.name + ": " + message.error.message));
       else entry.resolve(message.result);
     });
-    const cdp = (name, params = {}) => new Promise((resolveCommand, rejectCommand) => {
+    const cdp = (name, params = {}, timeoutMs = 20_000) => new Promise((resolveCommand, rejectCommand) => {
       const id = ++commandId;
       const timer = setTimeout(() => {
         pending.delete(id);
         rejectCommand(new Error("CDP timed out: " + name));
-      }, 20000);
+      }, timeoutMs);
       pending.set(id, {name, timer, resolve:resolveCommand, reject:rejectCommand});
       socket.send(JSON.stringify({id, method:name, params}));
     });
@@ -133,10 +133,10 @@ export async function openBrowser(url, downloadDirectory) {
         behavior:"allow", downloadPath:downloadDirectory,
       }); }
     }
-    const evaluate = async expression => {
+    const evaluate = async (expression, timeoutMs = 20_000) => {
       const result = await cdp("Runtime.evaluate", {
         expression, returnByValue:true, awaitPromise:true,
-      });
+      }, timeoutMs);
       if (result.exceptionDetails)
         throw new Error("Browser JS: " + (result.exceptionDetails.exception?.description ??
           result.exceptionDetails.text));

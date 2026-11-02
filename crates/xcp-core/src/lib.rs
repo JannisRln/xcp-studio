@@ -61,8 +61,8 @@ mod tests {
     }
 }
 
-pub mod xcp;
 pub mod session;
+pub mod xcp;
 
 #[cfg(windows)]
 pub mod pcan;
@@ -71,11 +71,11 @@ pub mod elf;
 
 pub mod metadata;
 
-/// Bounded, read-only ECU runtime pointer resolution.
+/// Bounded and identity-aware runtime pointer resolution core.
 pub mod ecu;
 
-/// Read-only A2L import and conversion core.
-pub mod a2l;
-
-/// Isolated calibration intent core; ECU writes remain disabled.
+/// Simulator-scoped calibration preview, validation and verification core.
 pub mod calibration;
+
+/// Read-only A2L metadata import, conversion and comparison.
+pub mod a2l;

@@ -175,7 +175,10 @@ impl CanTransport for PcanTransport {
                     if start.elapsed() >= budget {
                         return Ok(None);
                     }
-                    std::thread::sleep(self.poll_interval.min(budget.saturating_sub(start.elapsed())));
+                    std::thread::sleep(
+                        self.poll_interval
+                            .min(budget.saturating_sub(start.elapsed())),
+                    );
                 }
                 _ => return Err(status_error("CAN_Read", status)),
             }
