@@ -22,7 +22,9 @@ try {
     catch { return null; }
   };
   const before = await heap();
-  const result = await browser.evaluate("window.xcpBenchmark.run(80)");
+  // The full 80-update synthetic stress run can legitimately exceed the
+  // 20-second interactive CDP limit. Keep this benchmark bounded to 120 seconds.
+  const result = await browser.evaluate("window.xcpBenchmark.run(80)", 120_000);
   const after = await heap();
   assert.equal(result.samplesPerUpdate, 20000);
   assert.ok(result.canvasCount >= 2, "Did not render both uPlot Canvas lanes");
