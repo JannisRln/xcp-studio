@@ -1,14 +1,14 @@
-# Unabhängige Integrations-, Sicherheits- und GUI-Performance-Abnahme — 2026-11-01
+# Quellcode- und CI-basierte Integrations-, Sicherheits- und GUI-Bewertung — 2026-11-01 (aktualisiert 2026-11-02)
 
-**Urteil: NO-GO für die Gesamtfreigabe und NO-GO für einen Ersatz von React/uPlot durch egui/eframe.** Dies ist kein Bericht über einen fehlgeschlagenen vollständigen Produkttest: Die notwendigen integrierten Prüfungen und vergleichbaren nativen Messungen fehlen. Mehrere eng begrenzte Simulator- und CI-Tests sind erfolgreich.
+Die vollständige Produktintegration und hardwareäquivalente GUI-Präsentationsmessungen fehlen weiterhin; begrenzte native und Browser-Messungen liegen inzwischen vor.
 
 ## 1. Unveränderlicher Prüfgegenstand und Nachweisstufen
 
 - **Integrierter Ausgangsstand:** `main` = [`8014d82a8ef39c85a3c441a93206b605af0d2c71`](https://github.com/JannisRln/xcp-studio/commit/8014d82a8ef39c85a3c441a93206b605af0d2c71), überprüft am 2026-11-01. Windows-`main`-CI: [41328558606](https://github.com/JannisRln/xcp-studio/actions/runs/41328558606), Jobs `rust`, `frontend`, `docs`, `live-view-e2e` erfolgreich. Separater Branch-Pruning-Workflow [41328558494](https://github.com/JannisRln/xcp-studio/actions/runs/41328558494) erfolgreich; dieser ersetzt keine Produktabnahme.
 - **Nicht in `main`:** [#53](https://github.com/JannisRln/xcp-studio/pull/53) React/uPlot-Quality, E2E und Benchmark, Head `c6440783c3d9032460b4f1ecc5d4c549afcad6ed`, offener Draft. Sein erweitertes Windows-E2E **und** sein 20k-Benchmark wurden im CI-Lauf [41340881302](https://github.com/JannisRln/xcp-studio/actions/runs/41340881302) auf genau diesem Head ausgeführt und erfolgreich abgeschlossen. [#54](https://github.com/JannisRln/xcp-studio/pull/54) wurde **in den Feature-Branch #53**, nicht nach `main`, gemergt.
-- **Nicht in `main`:** [#55](https://github.com/JannisRln/xcp-studio/pull/55) nativer egui/eframe-Prototyp, Head `59b8a67ac74c562abcfd02762f334be393be1534`, offener Draft. Windows-CI [41340891973](https://github.com/JannisRln/xcp-studio/actions/runs/41340891973) mit vier grünen Jobs; **keine native GUI-Laufzeitmessung, kein Windows-GUI-Screenshot und keine native Backend-Subscriber-E2E-Prüfung** nachgewiesen.
+- **Nicht in `main`:** [#55](https://github.com/JannisRln/xcp-studio/pull/55), jetzt Head `f9a93c134e12a4778192bcf7d108539e36bbb3b9` (Draft). Windows-CI [41343590325](https://github.com/JannisRln/xcp-studio/actions/runs/41343590325) ist grün. Der [native Windows-Benchmark-Lauf 41343590307](https://github.com/JannisRln/xcp-studio/actions/runs/41343590307) produzierte echte Windows-Screenshots, synthetische native und React/uPlot 2k/20k-Metriken sowie einen begrenzten Read-only-Simulator-Subscriber-E2E; kein HIL, keine Hardware-Schreibfreigabe oder Input-to-Photon-Prüfung.
 - Weitere noch **offene, nicht integrierte** Teilimplementierungen: [#49 Pointer-Core](https://github.com/JannisRln/xcp-studio/pull/49), [#50 Kalibrierungs-Core ohne Schreibpfad](https://github.com/JannisRln/xcp-studio/pull/50), [#51 Projektdatei-Core](https://github.com/JannisRln/xcp-studio/pull/51), [#52 Diagnostik-Core](https://github.com/JannisRln/xcp-studio/pull/52), [#48 A2L-Core](https://github.com/JannisRln/xcp-studio/pull/48). Grüne PR-CI bedeutet **nicht**, dass die Funktion bereits auf `main` oder Ende-zu-Ende freigegeben ist.
-- **Methode:** Repository- und Programmcode-Review, GitHub-PR-/Commit-/CI-/Workflow-Logs und tatsächlich ausgegebene Benchmarkdaten. **Keine eigene lokale Windows-Ausführung, keine ECU/HIL-Hardware, kein identischer physischer Host für beide UIs.** Die Review-Perspektive ist unabhängig; Ausführungen anderer CI-Workflows sind als Fremdevidenz gekennzeichnet. `git clone` war in der Review-Laufzeitumgebung wegen fehlender GitHub-DNS-Auflösung nicht möglich. Daher keine behaupteten eigenen `cargo`-, `npm`- oder Browser-Testläufe.
+Das Audit stammt aus derselben verbundenen GitHub-Autor-Identität; es ist **keine unabhängige menschliche Freigabe**. CI-Läufe und Artefakte wurden anhand ihrer tatsächlichen Ausgaben geprüft;
 - **Statusbezeichnungen:** `PASS (CI)` = konkret benannter nachweisbarer begrenzter Test auf angegebenem Commit; `CODE-REVIEW` = plausibler Implementierungsbefund ohne eigene Laufzeitausführung; `PARTIAL` = Test/Scope unvollständig; `NOT TESTED` = kein belastbarer Nachweis; `BLOCKER` = notwendige Freigabebedingung fehlt bzw. nachgewiesene Sicherheitsgrenze verhindert das vollständige Ziel. Kein `NOT TESTED` wird als fehlgeschlagener Test ausgegeben.
 
 ## 2. Teil A — funktionale Abnahme
@@ -31,13 +31,13 @@
 - **B-01, Release:** Vollständiges Simulator-E2E inklusive autorisierter Kalibrierung und Readback fehlt ([T-0011](../tickets/T-0011-simulator-e2e-release.md), [T-0007](../tickets/T-0007-calibration-transaction.md)).
 - **B-02, Safety:** Runtime-Adressmapping und Pointer-Identity-Invalidierung sind nicht mit der zentralen Session integriert ([T-0014](../tickets/T-0014-runtime-pointer-resolution.md)); unbestätigte ELF-Link-Time-Adressen dürfen nicht gelesen oder geschrieben werden.
 - **B-03, Qualität/Datenverlust:** Keine End-to-End-Semantik und Akzeptanz für tatsächliche ECU-Lücken, Legacy-Quality, Roh-/physikalische Werte, durable Recording und Replay ([T-0005](../tickets/T-0005-shared-acquisition.md), [T-0015](../tickets/T-0015-backend-recording-store.md)).
-- **B-04, Governance:** `main.protected=false` und `GET /repos/JannisRln/xcp-studio/rulesets` ergibt `[]`; erfolgreiche CI allein erzwingt keinen Review-/Check-Merge-Gate. T-0012 ist außerdem noch durch unabhängige DTO-Owner-Abnahme blockiert ([T-0001](../tickets/T-0001-ci-quality-gates.md), [T-0012](../tickets/T-0012-versioned-api-contracts.md)).
-- **B-05, GUI-Migrationsentscheidung:** Keine validen identischen 2k/20k-Messreihen für beide Systeme und keine native Input-to-Present-/RSS-/CPU-/Packaging-Abnahme. Ein Ersatz der produktiv integrierten React-GUI ist derzeit **nicht gerechtfertigt**.
+- **B-04, Governance:** Das aktive [Main-Ruleset #26324325](https://github.com/JannisRln/xcp-studio/rules/26324325) (API `updated_at=2026-11-01T21:22:28.285+01:00`) verlangt PRs, vier Windows-Jobs (`rust`, `frontend`, `docs`, `live-view-e2e`) und Review-Thread-Auflösung, aber **`required_approving_review_count=0` und `strict_required_status_checks_policy=false`**. Die frühere Behauptung `rulesets=[]` ist überholt. Admin muss unabhängige Approvals und aktuelle Merge-Kandidaten-Checks erzwingen. T-0012 erfordert weiterhin Contract-Owner-Abnahme ([T-0001](../tickets/T-0001-ci-quality-gates.md), [T-0012](../tickets/T-0012-versioned-api-contracts.md)).
+- **B-05, GUI-Migrationsentscheidung:** Ein einzelner Same-Runner-Lauf für synthetische React/egui-2k/20k-Last ist vorhanden, aber **Messgrenzen sind nicht gleich** (Browser-rAF vs native Callback, JS Heap vs RSS); GPU-Present, Input-to-Photon, wiederholte interaktive Bedienprüfungen und vergleichbare Browser-Prozess-RSS fehlen. Ersatz von React/uPlot ist derzeit **nicht gerechtfertigt**.
 - **Kein bestätigter Produktions-Sicherheitsvorfall aus dem Review:** Die vorstehenden Punkte sind fehlende Release-/Integrationsnachweise oder explizite Grenzen; sie sind nicht als reproduzierter unautorisierter ECU-Write ausgegeben.
 
 ## 3. Teil B — Performance: reale Beobachtung und methodische Fallstricke
 
-### 3.1 Messmatrix / belastbare Rohdaten
+### 3.1 Historische Messmatrix vor dem neuen nativen Windows-Lauf (überholt)
 
 Test `frontend/src/features/measurements/live-view.bench.mjs` auf #53-Head `c6440783`; [Windows-CI 41340881302](https://github.com/JannisRln/xcp-studio/actions/runs/41340881302), Job `live-view-e2e`, Artefakt [xcp-uplot-20k-benchmark-windows](https://github.com/JannisRln/xcp-studio/actions/runs/41340881302/artifacts/13097084012). Protokoll: 2026-11-01T19:18:46Z. Windows `win32`, Build 10.0.26100; AMD EPYC 7763, 4 logische vCPUs des Runners, 17.174.360.064 Byte Host-Gesamtspeicher; Node v22.23.4, Microsoft Edge. Headless Edge wurde mit `--disable-gpu` gestartet.
 
@@ -55,6 +55,24 @@ Fixture: synthetisch, `timestamp_ms = 1761980000000 + i`, 2 Signale, RPM-Spike b
 
 Die 8,43 rAF-FPS und die gemessene Update-Latenz sind **ein auffälliges Performance-Symptom** dieser konkreten Browser-Testschleife. Sie sind **weder ein reproduzierter Produktions-Throughput-Einbruch noch ein Beweis für einen GUI-Library-Vorteil**. Kein Mittelwert aus wiederholten Läufen und kein Messunsicherheitsintervall liegt vor. Das Protokoll misst unter headless `--disable-gpu`, also nicht identisch zu einer interaktiven Desktop-GPU-Pipeline.
 
+### 3.1a Aktualisierte Same-Runner-Rohdaten (2026-11-01, aktueller #55-Head)
+
+**Quelle:** [GitHub Actions 41343590307, Artefakt 13098871096](https://github.com/JannisRln/xcp-studio/actions/runs/41343590307/artifacts/13098871096). Die ZIP enthält `react-uplot-2000.json`, `react-uplot-20000.json`, `xcp-native-benchmark-2000.json`, `xcp-native-benchmark-20000.json`, `windows-environment.json`, zwei echte PNGs und `native-readonly-subscriber-e2e.json`. Windows Server 2025, AMD EPYC 7763, 4 logische CPUs, zwei synthetische Signale, 80 Updates, je 2.000 bzw. 20.000 Frames.
+
+| Metrik | React 2k | React 20k | egui 2k | egui 20k |
+| --- | ---: | ---: | ---: | ---: |
+| Abgeschlossene Updates/s | 26,54 | 4,21 | 3,87 | 2,08 |
+| Browser-rAF / native Callback-Pacing FPS | 53,07 | 8,42 | 3,83 | 2,07 |
+| React synchroner Commit p50/p95/p99 (ms) | 23,5 / 38,2 / 42,7 | 212,3 / 267,8 / 284,6 | — | — |
+| React Update→zweiter rAF p50/p95/p99 (ms) | 33,5 / 50,2 / 55,7 | 233,5 / 283,4 / 299,8 | — | — |
+| Native UI-CPU p50/p95/p99 (ms) | — | — | 1,02 / 1,28 / 1,45 | 1,27 / 1,42 / 1,47 |
+| Native Callback-Intervall p50/p95/p99 (ms) | — | — | 269,08 / 269,99 / 284,10 | 489,59 / 492,20 / 498,19 |
+
+Die native Prozess-RSS nach den Läufen beträgt 76.390.400 bzw. 78.094.336 Byte, bei einem gemessenen Peak-Working-Set von 80.568.320 Byte über beide Läufe. React meldet JavaScript-Heap-Deltas von 6.523.900 bzw. 143.302.612 Byte. **RSS und JS Heap sind nicht austauschbar.** CPU-Auslastung des nativen Prozesses im kombinierten Lauf: 74,09 % der vier zugeteilten logischen CPUs (kein gleichwertiger React-Prozesswert). Browser-rAF und native Callback-Pacing FPS messen unterschiedliche Ereignisse. **Keine** GPU-Present-/Scanout- oder echte Input-to-Photon-Messung.
+
+Das native Subscriber-Artefakt weist `acquisitionId=acq-1`, einen Subscriber und `singleSessionRemainedConnected=true` im Simulator nach; kein zusätzlicher XCP-Master, kein Hardware-/DAQ-Beleg. Diese neueren Artefakte ersetzen ältere Behauptungen, egui sei gar nicht ausgeführt worden. Eine GUI-Migration wird dadurch **nicht** freigegeben.
+
+
 ### 3.2 Browser-Benchmark auf Verzerrung geprüft (konkrete Codepfade)
 
 1. `benchmarkHarness.tsx`: Pro Iteration `frames = [...frames.slice(1), frame(...)]` kopiert einen kompletten 20k-Datensatz und `flushSync(render)` erzwingt einen **synchronen vollständigen React-Commit**. Das ist absichtlich ein Worst-Case-Update, nicht automatisch der normale Live-View-Takt.
@@ -67,7 +85,7 @@ Die 8,43 rAF-FPS und die gemessene Update-Latenz sind **ein auffälliges Perform
 - #55 `fixture.rs` nutzt `VecDeque.pop_front()/push_back()`: der Fixture-Update selbst kopiert im Gegensatz zum Browser-Test **nicht** 20.000 Frames. Das ist ein **methodischer Unterschied** der zu trennenden Ingest-Kosten, auch wenn die numerischen Eingangssamples gleich sind.
 - #55 `main.rs` und `fixture.rs`: `chart_segments` traversiert und allokiert Plot-Segmente/Linien je sichtbarer Lane und Repaint neu; Gap-Filter sowie Cursor-`nearest_value` durchsuchen vorhandene Frames. `request_repaint_after(16 ms)` kann Repaints ohne neue XCP-Daten anfordern. Diese CPU-/Allokations-/Energie-Kosten müssen mit Profiler und 20k-/Gap-Stress geprüft werden.
 - #55 `benchmark.rs` erfasst `App::ui` CPU-Zeit, vorherigen eframe-Frame-CPU-Wert und Callback-Intervalle, **nicht GPU-Present**. Native Prozess-RSS ist nur ein Zeitpunkt nach dem Lauf, nicht der Peak. Browser-`Runtime.getHeapUsage` ist **nicht** OS-RSS. `clickToNextUpdateProxyMs` ist nicht Input-to-Photon und braucht echte Klickproben; Zoom/Pan fehlen als vergleichbare Wiederholtests.
-- Beide Lösungen zeigen zwei Lanes und arbeiten mit demselben numerischen Fixture; das macht die Daten korrekt vergleichbar, **nicht die derzeitige Messmethodik**. Native GUI wurde auf CI nur kompiliert/getestet, nicht visuell auf realem Windows-Desktop ausgeführt. Der vorhandene PowerShell-Benchmark ist ein **Rezept**, kein Laufbeweis.
+Der aktuelle native Windows-Lauf hat eine reale Anwendung mit Screenshots ausgeführt. Das belegt einen erfolgreichen Start, **nicht** die vollständige Zoom-/Pan-/Docking-/Cursor-Bedienbarkeit oder echte GPU-Present-/Input-to-Photon-Latenz.
 
 ### 3.4 Wiederholbarer fairer Benchmarkplan (keine erfundenen Zahlen)
 
@@ -118,12 +136,12 @@ Dies sind **neue, noch nicht als GitHub-Issues angelegte QA-Follow-ups** unter b
 | **P0 QA-F07 – Branch-Governance und Contract-Sign-off** | [T-0001](../tickets/T-0001-ci-quality-gates.md), [T-0012](../tickets/T-0012-versioned-api-contracts.md): geschützte `main`-Checks/Review inklusive absichtlich blockiertem Merge nachweisen; unabhängige API-Owner-Freigabe. |
 | **P1 QA-F08 – Metadaten/Projekt/Diagnose-Reopen-E2E** | [T-0008](../tickets/T-0008-a2l-import-mapping.md), [T-0010](../tickets/T-0010-project-persistence.md), [T-0016](../tickets/T-0016-diagnostics-observability.md): A2L-Konflikte/Conversion, Schema-Migration/beschädigte Dateien/ECU-Fingerprint-Stale, erlaubte Diagnoseexporte ohne Pfad-/Secret-Leak und gezielte Fault-Injection. |
 | **P1 QA-F09 – Backend-Aufzeichnung & echte Lücken** | [T-0015](../tickets/T-0015-backend-recording-store.md), [T-0005](../tickets/T-0005-shared-acquisition.md): unabhängiger Recorder/CSV vs. Referenzbatches, Disk-Full, Replay, unbekannte/ungültige Qualität, DAQ-vs-Subscriber-Verluste getrennt. |
-| **P1 QA-F10 – Read-only native Subscriber- und Windows-Packaging-Spike** | [#55](https://github.com/JannisRln/xcp-studio/pull/55), in einem **separat koordinierten** GUI-Ticket: echter Simulator-Subscriber, Backpressure/Gaps/Disconnect, GUI-Input/CPU/GPU-Profiling, High-DPI/Undock/Keyboard, Startup, signiertes Packaging und reproduzierbares Rollback. |
+| **P1 QA-F10 – Native Subscriber-Fault-/Windows-Packaging-Vertiefung** | [#55](https://github.com/JannisRln/xcp-studio/pull/55): Ein begrenzter Read-only-Subscriber auf vorhandener Simulator-Acquisition wurde in [41343590307](https://github.com/JannisRln/xcp-studio/actions/runs/41343590307) erfolgreich geprüft; offen sind umfassende Backpressure/Gaps/Disconnect-Stresstests, GUI-Input/CPU/GPU-Present-Profiling, High-DPI/Undock/Keyboard, signiertes Packaging und reproduzierbares Rollback. |
 
 ## 6. Klare Schlussentscheidung und nächste Review-Gates
 
 1. **Bestanden:** Windows `main`-CI; begrenzte Simulator-Connect-/Disconnect-, Session-Actor-, Shared-Acquisition-/Zwei-Subscriber- und Live-View-Tests. Auf offenem #53-Head zusätzlich erweiterte Browser-E2E für Pause/Resume, Reconnect, A/B und CSV. Die derzeitige öffentliche Schreibsperre ist durch Code und Unit-Tests gestützt.
-2. **Fehlend:** integrierte Sicherheits-/Metadaten-/Pointer-/Kalibrierungs-/Recording-Abnahme, HIL, Last-/Fault-Tests, reale native Windows-UI-Ausführung, React-2k-Lauf und faire native/Web-Performance-Matrix.
+2. **Fehlend:** integrierte Sicherheits-/Metadaten-/Pointer-/Kalibrierungs-/Recording-Abnahme, HIL, Last-/Fault-Tests, äquivalente GUI-Present-/Input-Latenz, vollständige native Interaktions-/Packagingtests und unabhängige Sicherheitsreviews. **Vorhanden:** echte native Windows-GUI-Ausführung mit Screenshots sowie ein synthetischer Same-Runner-React-/egui-2k/20k-Vergleich und begrenzter nativer Read-only-Subscriber-Smoke-Test.
 3. **Freigabeblocker:** B-01 bis B-05 oben. Keine Produkt-, Hardware- oder Kalibrierungsfreigabe auf Basis dieses Reviews.
 4. **GUI-Entscheid:** **React/uPlot vorerst beibehalten und Browser-Datenpfad optimieren; keine native Migration genehmigen.** Die einmalig gemessenen 8,43 FPS im 20k-Worst-Case sind ein Untersuchungssignal, kein gültiger Cross-Framework-Sieg.
 5. **Handoff:** QA-F01..QA-F10 mit klarer Ticketzuordnung und messbaren Done-Kriterien. Änderungen in diesem QA-PR sind ausschließlich Dokumentation; keine Änderungen an Feature-Branches, Session-Protokollen, DTOs, Lockfiles, CI oder Hardware-Safety.
