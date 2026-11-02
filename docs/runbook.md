@@ -62,3 +62,32 @@ Include OS, Git SHA, backend/frontend versions, step sequence, exact endpoint (n
 For physical hardware, follow [PCAN guide](pcan-basic.md), safe policy in [security-safety](security-safety.md) and a separate controlled bench procedure. Do not enable hardware writes for debugging.
 
 See [agent workflow](agent-workflow.md), [test strategy](test-strategy.md) and [ticket index](tickets/INDEX.md).
+
+
+## 6. T-0016 staged diagnostics and privacy (not a backend endpoint)
+
+The isolated diagnostics core in `crates/xcp-server/src/diagnostics/mod.rs` has no
+network routes and collects **no data automatically** in this phase. Producers
+will be attached to session/acquisition/WS owners after an API/contract review.
+The local browser Diagnostics page displays existing health/session state and
+a bounded sanitized projection of its own activity; it is **not** a backend event
+timeline. Legacy UI activity lacks trusted timestamps and correlation IDs.
+
+Reproduce the core fault tests with `cargo test -p xcp-server diagnostics::tests`.
+Tests inject connection loss, request timeout, missing measurement frames,
+XCP negative response, WebSocket timeout and diagnostic queue overflow with
+fixed timestamps and scoped IDs. Run `cd frontend && npm test -- diagnosticsModel`
+for UI projection, filtering, redaction and event-cap tests. These tests are
+simulator/fixture only, not hardware bench evidence.
+
+Manual **Export browser-only support bundle** in the Diagnostics panel downloads
+JSON from the current browser memory. Inspect it before sharing. It contains
+static classified event codes, no raw API errors, configured signal names, ECU
+addresses, private file paths or raw ECU memory. No server diagnostics bundle
+can yet be downloaded, and no diagnostics are transmitted off-device.
+
+When wiring backend event producers, preserve the no-free-text contract; do
+not pass XCP payloads, driver exception strings, connection credentials or
+absolute paths into diagnostics. Avoid repurposing an opaque ID for user text.
+Production integration requires a reviewed versioned public schema and
+backend/frontend contract tests before exposing the core exporter.

@@ -1,0 +1,9 @@
+ASAP2_VERSION 1 71
+/begin PROJECT interface_fixture "Synthetic A2ML fixture"
+  /begin MODULE gateway ""
+    /begin A2ML
+      block "IF_DATA" long;
+    /end A2ML
+    /begin IF_DATA 0x1234 /end IF_DATA
+  /end MODULE
+/end PROJECT

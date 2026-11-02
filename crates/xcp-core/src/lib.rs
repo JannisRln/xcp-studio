@@ -71,4 +71,8 @@ pub mod elf;
 
 pub mod metadata;
 
+/// Bounded and identity-aware runtime pointer resolution core.
 pub mod ecu;
+
+/// Read-only A2L metadata import, conversion and comparison.
+pub mod a2l;
