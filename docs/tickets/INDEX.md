@@ -14,7 +14,8 @@
 | T-0004 | [XCP session actor](T-0004-xcp-session-actor.md) | P0 | ready | — | [#7](https://github.com/JannisRln/xcp-studio/issues/7) |
 | T-0005 | [Shared acquisition + DAQ](T-0005-shared-acquisition.md) | P0 | blocked | T-0004, T-0012 | [#8](https://github.com/JannisRln/xcp-studio/issues/8) |
 | T-0006 | [Measurement charts and export](T-0006-measurement-workspace.md) | P0 | in-progress | T-0002, T-0005 | [#9](https://github.com/JannisRln/xcp-studio/issues/9) |
-| T-0007 | [Simulated calibration transaction](T-0007-calibration-transaction.md) | P0 | blocked | T-0003, T-0004, T-0013 | [#10](https://github.com/JannisRln/xcp-studio/issues/10) |
+| T-0010 | [Git-native project persistence and migrations](T-0010-project-persistence.md) | P0 | in-progress | T-0002, T-0012 | [#13](https://github.com/JannisRln/xcp-studio/issues/13) |
+| T-0007 | [Simulated calibration transaction](T-0007-calibration-transaction.md) | P0 | in-progress | T-0003, T-0004, T-0013 | [#10](https://github.com/JannisRln/xcp-studio/issues/10) |
 | T-0011 | [Simulator E2E release acceptance](T-0011-simulator-e2e-release.md) | P0 | blocked | T-0005, T-0006, T-0007 | [#3](https://github.com/JannisRln/xcp-studio/issues/3) |
 | T-0012 | [Versioned API contracts](T-0012-versioned-api-contracts.md) | P0 | blocked | — | [#8](https://github.com/JannisRln/xcp-studio/issues/8) |
 | T-0013 | [Security and hardware-write safety](T-0013-security-safety-policy.md) | P0 | ready | — | [#10](https://github.com/JannisRln/xcp-studio/issues/10) |
@@ -24,11 +25,10 @@
 
 | ID | Ticket | Priority | Status | Depends on | GitHub issue |
 | --- | --- | --- | --- | --- | --- |
-| T-0008 | [A2L metadata and conversions](T-0008-a2l-import-mapping.md) | P1 | blocked | T-0003 | [#11](https://github.com/JannisRln/xcp-studio/issues/11) |
+| T-0008 | [A2L metadata and conversions](T-0008-a2l-import-mapping.md) | P1 | in-progress | T-0003 | [#11](https://github.com/JannisRln/xcp-studio/issues/11) |
 | T-0009 | [PCAN + Vector Windows transport](T-0009-can-hardware-adapters.md) | P1 | blocked | T-0004, T-0013 | [#12](https://github.com/JannisRln/xcp-studio/issues/12) |
-| T-0010 | [Project persistence](T-0010-project-persistence.md) | P1 | blocked | T-0002, T-0012 | [#13](https://github.com/JannisRln/xcp-studio/issues/13) |
 | T-0015 | [Durable backend recording](T-0015-backend-recording-store.md) | P1 | blocked | T-0005, T-0012 | [#9](https://github.com/JannisRln/xcp-studio/issues/9) |
-| T-0016 | [Structured diagnostics](T-0016-diagnostics-observability.md) | P1 | blocked | T-0004, T-0005 | [#13](https://github.com/JannisRln/xcp-studio/issues/13) |
+| T-0016 | [Structured diagnostics](T-0016-diagnostics-observability.md) | P1 | in-progress | T-0004, T-0005 | [#13](https://github.com/JannisRln/xcp-studio/issues/13) |
 
 ## Suggested parallel work allocation
 
@@ -41,12 +41,16 @@
 | 1 | Frontend | T-0002 | PR #18 has been merged; verify new UI baseline and avoid overlapping app-shell changes |
 | 1 | Security and safeguards | T-0013 | Policy review blocks unsafe remote exposure/hardware writes |
 | 2 | Acquisition and pointer resolver | T-0005, T-0014 | Shared session reads, separate metadata/runtime boundaries |
-| 2 | A2L, hardware, project format | T-0008, T-0009, T-0010 | Independent feature modules after contracts |
+| 2 | A2L, hardware, project format | T-0008, T-0009, T-0010 | Git-native Save/Open and migration are P0 after usable Live View; coordinate format contract with T-0012 |
 | 3 | Measurement visualization and backend recorder | T-0006, T-0015 | Consume frozen acquisition schema |
 | 3 | Calibration and diagnostics | T-0007, T-0016 | Coordinate audit/event schema and shared session |
 | 4 | End-to-end release acceptance | T-0011 | Integrate only green, merged feature PRs |
 
 **Integration reconciliation (2026-11-01):** PRs #39/#40/#42/#43/#45/#46 were squash-merged, and `main` CI [41324320683](https://github.com/JannisRln/xcp-studio/actions/runs/41324320683) passed. T-0003/T-0004/T-0013 are READY for remaining acceptance/implementation, not DONE; merged PR #46 leaves T-0012 BLOCKED for explicit independent T-0005/T-0006 owner contract sign-off. T-0006 remains in progress with separately coordinated follow-up work; do not overwrite new claims. The default branch reports `protected: false` and repository ruleset list is empty, so T-0001 stays BLOCKED until an administrator enables and verifies enforcement. See [integration review](../integration-review-2026-11-01.md).
+
+**T-0014 coordination:** `chatgpt-t0014-core` owns the standalone resolver phase in `feature/T-0014-bounded-pointer-core`. Overall integration is still blocked; no session, metadata, DTO, or frontend ownership is transferred. See its ticket for pending decisions.
+
+**Historical batch integration review (2026-11-01):** See [PRs #48–#53 readiness review](../integration-prs-48-53-2026-11-01.md) for dated Windows CI, browser E2E and pointer-security findings. **Current status (2026-11-02):** #48, #49 (with #56 fix), #50, #51 and #52 are merged as bounded core phases. #53 remains draft; #55 is an experimental GUI and #59 is QA-only **DO NOT MERGE**. The repository ruleset no longer requires a PR, but still enforces the four CI jobs. Historical statements in that review must not be read as current acceptance.
 
 **Merge discipline:** one branch/owner per ticket; cross-module schema change via T-0012; dependencies must be confirmed DONE unless a narrowly scoped independent phase is documented in the ticket. A BLOCKED item is not automatically assignable. Green CI is necessary but not sufficient for acceptance.
 
