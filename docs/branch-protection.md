@@ -59,9 +59,15 @@ Changed/unmerged/protected branches are retained. No force push is performed. Th
 Do not claim branch protection has been configured unless the ruleset is confirmed through settings or administrative API access. Do not merge PRs while checks are pending or failing.
 
 
-## Verified active ruleset snapshot — 2026-11-01 (partially remediated)
+## Latest live ruleset verification — 2026-11-02
 
-[GitHub repository ruleset Main (ID 26324325)](https://github.com/JannisRln/xcp-studio/rules/26324325) is **active** on \`refs/heads/main\`. It enforces \`deletion\`, \`non_fast_forward\` and \`pull_request\`; no bypass actors are configured.
+The [live Main ruleset #26324325](https://github.com/JannisRln/xcp-studio/rules/26324325), API `updated_at=2026-11-02T05:48:38.127+01:00`, **no longer contains the `pull_request` rule**. This means it currently enforces **no required approving review and no required review-thread resolution**. The still-active rules are `deletion`, `non_fast_forward` and `required_status_checks`: `rust`, `frontend`, `docs`, `live-view-e2e`. Required status checks are not strict about an up-to-date merge base (`strict_required_status_checks_policy=false`). The older snapshot below is historical and must not be represented as today's enforcement.
+
+Repository administrators intentionally removed the pull-request rule to unblock integration. The integration operator must still verify current-head CI, preserve security boundaries and resolve merge conflicts. For a future protected-review workflow, independently review and decide whether to restore PR and approval enforcement; do not describe it as active before verification.
+
+## Historical active ruleset snapshot — 2026-11-01 (superseded)
+
+[GitHub repository ruleset Main (ID 26324325)](https://github.com/JannisRln/xcp-studio/rules/26324325) was verified on 2026-11-01 as active on \`refs/heads/main\`. The earlier \`pull_request\` rule was **removed by repository administration on 2026-11-02**; see the latest update below. The currently enforced protections still include \`deletion\` and \`non_fast_forward\`.
 
 **Important update:** The API first showed 0 required reviews/no required checks. A subsequent live GitHub API check observed \`updated_at = 2026-11-01T21:22:28.285+01:00\`. Earlier approval-count claims are historical; the **latest verified** values are:
 
