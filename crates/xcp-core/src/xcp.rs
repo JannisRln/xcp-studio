@@ -117,9 +117,10 @@ impl<T: CanTransport> XcpMaster<T> {
             let Some(frame) = frame else {
                 // Non-blocking mocks/adapters may report an empty receive
                 // immediately. Poll without consuming a CPU core.
-                std::thread::sleep(Duration::from_millis(1).min(
-                    deadline.saturating_duration_since(Instant::now()),
-                ));
+                std::thread::sleep(
+                    Duration::from_millis(1)
+                        .min(deadline.saturating_duration_since(Instant::now())),
+                );
                 continue;
             };
             if frame.id != self.ids.response {
@@ -145,7 +146,11 @@ impl<T: CanTransport> XcpMaster<T> {
     pub(crate) fn discard_pending(&mut self) -> Result<(), XcpError> {
         const MAX_DRAIN: usize = 64;
         for _ in 0..MAX_DRAIN {
-            if self.transport.receive_with_timeout(Duration::ZERO)?.is_none() {
+            if self
+                .transport
+                .receive_with_timeout(Duration::ZERO)?
+                .is_none()
+            {
                 self.resources = None;
                 return Ok(());
             }
@@ -282,7 +287,10 @@ impl<T: CanTransport> XcpMaster<T> {
         deadline: Option<Instant>,
     ) -> Result<(), XcpError> {
         validate_access_range(address, data.len())?;
-        if self.resources.is_some_and(|resources| resources & 0x01 == 0) {
+        if self
+            .resources
+            .is_some_and(|resources| resources & 0x01 == 0)
+        {
             return Err(XcpError::Protocol(ERR_ACCESS_DENIED));
         }
         self.set_mta_impl(address, deadline)?;

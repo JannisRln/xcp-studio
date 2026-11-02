@@ -5,8 +5,8 @@ Applies to `main` of XCP Studio. The checks below are recommended repository set
 ## Required checks
 
 Set the `main` ruleset to:
-- Require a pull request before merging. Prefer one independent approving review for changes to XCP session handling, hardware operations, calibration, CI, and public schemas.
-- Require passing GitHub Actions jobs **rust**, **frontend**, and **docs** from the latest PR head commit.
+- Require a pull request before merging. Require at least one independent approving review for all changes, with explicit security/owner sign-off for XCP session handling, hardware operations, calibration, CI, and public schemas.
+- Require passing GitHub Actions jobs **rust**, **frontend**, **docs**, and **live-view-e2e** from the current PR integration candidate.
 - Require branches to be up to date before merging if needed to protect against integration conflicts.
 - Prevent force pushes and branch deletion on `main`.
 - Dismiss stale approvals when the PR changes after review; resolve review comments.
@@ -57,3 +57,35 @@ Changed/unmerged/protected branches are retained. No force push is performed. Th
 5. Record the CI run ID and test evidence on the owning Markdown ticket.
 
 Do not claim branch protection has been configured unless the ruleset is confirmed through settings or administrative API access. Do not merge PRs while checks are pending or failing.
+
+
+## Latest live ruleset verification — 2026-11-02
+
+The [live Main ruleset #26324325](https://github.com/JannisRln/xcp-studio/rules/26324325), API `updated_at=2026-11-02T05:48:38.127+01:00`, **no longer contains the `pull_request` rule**. This means it currently enforces **no required approving review and no required review-thread resolution**. The still-active rules are `deletion`, `non_fast_forward` and `required_status_checks`: `rust`, `frontend`, `docs`, `live-view-e2e`. Required status checks are not strict about an up-to-date merge base (`strict_required_status_checks_policy=false`). The older snapshot below is historical and must not be represented as today's enforcement.
+
+Repository administrators intentionally removed the pull-request rule to unblock integration. The integration operator must still verify current-head CI, preserve security boundaries and resolve merge conflicts. For a future protected-review workflow, independently review and decide whether to restore PR and approval enforcement; do not describe it as active before verification.
+
+## Historical active ruleset snapshot — 2026-11-01 (superseded)
+
+[GitHub repository ruleset Main (ID 26324325)](https://github.com/JannisRln/xcp-studio/rules/26324325) was verified on 2026-11-01 as active on \`refs/heads/main\`. The earlier \`pull_request\` rule was **removed by repository administration on 2026-11-02**; see the latest update below. The currently enforced protections still include \`deletion\` and \`non_fast_forward\`.
+
+**Important update:** The API first showed 0 required reviews/no required checks. A subsequent live GitHub API check observed \`updated_at = 2026-11-01T21:22:28.285+01:00\`. Earlier approval-count claims are historical; the **latest verified** values are:
+
+| Setting | Current verified GitHub state | Required final state |
+| --- | --- | --- |
+| PR before merge | enabled | keep enabled |
+| Independent approving reviews | **\`required_approving_review_count: 0\` (NOT enforced)** | **at least 1**; require an independent reviewer, not the author |
+| Stale approval dismissal | \`dismiss_stale_reviews_on_push: true\` | keep enabled |
+| Unresolved review threads | \`required_review_thread_resolution: true\` | keep enabled |
+| Required GitHub Actions checks | **all four configured**: \`rust\`, \`frontend\`, \`docs\`, \`live-view-e2e\` (integration ID 15368) | keep all four; negative-test enforcement |
+| Require branch up to date | \`strict_required_status_checks_policy: false\` | **set true**, or use an explicitly validated equivalent merge queue |
+| Branch deletion / force-push | \`deletion\` and \`non_fast_forward\` rules | keep enabled |
+| Direct \`main\` changes / bypass | PR required, bypass list empty | keep mandatory PR and no direct-write bypass |
+
+**Remaining repository administrator actions (manual):**
+
+1. Open **Settings → Rules → Rulesets → Main**. Set required approving reviews from **0 to at least 1**, preserving stale-review dismissal and required thread resolution. Confirm the four GitHub Actions checks; do not add the branch-pruning maintenance workflow.
+2. Enable **Require branches to be up to date before merging** (\`strict_required_status_checks_policy: true\`) or an equivalent merge-queue policy that actually runs on the current merge candidate.
+3. Save and verify the live \`GET /repos/JannisRln/xcp-studio/rulesets/26324325\` JSON, including all **four** required check names and freshness policy. Perform a non-bypassed test PR with a failing \`docs\` job, missing independent approval, or unresolved security thread and verify GitHub rejects merging.
+
+The connected GitHub App can READ this ruleset but does not expose an administrative mutation action; **this documentation change has not altered enforcement**. Current checks enforcement includes all four jobs, but **no review approval is required** by this ruleset; the release gate remains blocked by missing mandatory independent approval, merge-candidate freshness and the absence of independent approvals on the feature PRs. Keep [issue #4](https://github.com/JannisRln/xcp-studio/issues/4) open until these gaps and their negative tests are verified. [PR #56](https://github.com/JannisRln/xcp-studio/pull/56) also requires an independent security review and follow-up #49 CI.
