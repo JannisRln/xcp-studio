@@ -12,10 +12,10 @@ export function chartPoints(frames: MeasurementFrame[], signal: SignalDefinition
 }
 import { chartViewport, groupSignalsByUnit, nearestChartFrame } from "./chartMath";
 import { cursorFrequencyHz, frameTimeDomain, panViewport, zoomViewport } from "./measurementTools";
-import { alignedPlotData, cursorValue } from "./plotData";
+import { alignedPlotData, cursorValue, type ChartFrame } from "./plotData";
 
 type Props = {
-  frames: MeasurementFrame[];
+  frames: ChartFrame[];
   signals: SignalDefinition[];
   height?: number;
   title?: string;
@@ -26,7 +26,7 @@ type Measurements = { a: number | null; b: number | null };
 type LaneProps = {
   unit: string;
   signals: SignalDefinition[];
-  frames: MeasurementFrame[];
+  frames: ChartFrame[];
   viewport: Viewport;
   markers: Measurements;
   onMeasure: (time: number) => void;
@@ -39,6 +39,7 @@ function ChartLane({ unit, signals, frames, viewport, markers, onMeasure, onZoom
   const plot = useRef<uPlot | null>(null);
   const interactionRef = useRef({ onMeasure, onZoom, onPan, viewport });
   const markersRef = useRef(markers);
+  const gapsRef = useRef<number[]>([]);
   const seriesKey = signals.map(signal => signal.id + "/" + signal.color).join(",");
   const aligned = useMemo(() =>
     alignedPlotData(frames, signals, 1400) as uPlot.AlignedData,
@@ -46,6 +47,8 @@ function ChartLane({ unit, signals, frames, viewport, markers, onMeasure, onZoom
   );
   interactionRef.current = { onMeasure, onZoom, onPan, viewport };
   markersRef.current = markers;
+  gapsRef.current = frames.filter(frame => frame.gapBefore !== undefined)
+    .map(frame => frame.timestamp_ms);
 
   useEffect(() => {
     const element = host.current;
@@ -83,6 +86,14 @@ function ChartLane({ unit, signals, frames, viewport, markers, onMeasure, onZoom
         draw: [(u) => {
           const ctx = u.ctx;
           const values = markersRef.current;
+          ctx.save();
+          ctx.fillStyle = "rgba(248, 178, 92, 0.22)";
+          for (const time of gapsRef.current) {
+            if (time < u.scales.x.min! || time > u.scales.x.max!) continue;
+            const x = u.valToPos(time, "x", true);
+            ctx.fillRect(x - 2, u.bbox.top, 4, u.bbox.height);
+          }
+          ctx.restore();
           for (const [name, time] of [["A", values.a], ["B", values.b]] as const) {
             if (time === null || time < u.scales.x.min! || time > u.scales.x.max!) continue;
             const x = u.valToPos(time, "x", true);
@@ -219,6 +230,8 @@ export function TimeSeriesChart({ frames, signals, title = "Time series" }: Prop
   const a = measured ? cursorValue(frames, measured, markers.a) : null;
   const b = measured ? cursorValue(frames, measured, markers.b) : null;
   const frequency = cursorFrequencyHz(a?.time ?? null, b?.time ?? null);
+  const gaps = useMemo(() => visible.reduce((count, frame) =>
+    count + (frame.gapBefore !== undefined ? 1 : 0), 0), [visible]);
 
   const measure = useCallback((time: number) => {
     const nearest = nearestChartFrame(frames, time);
@@ -257,6 +270,11 @@ export function TimeSeriesChart({ frames, signals, title = "Time series" }: Prop
       <button className="button small" type="button" disabled={!panMs}
         onClick={() => setPanMs(0)}>Live edge</button>
     </div>
+    <p className="chart-gap-key" role="status">
+      {gaps ? `${gaps} stream discontinuity${gaps === 1 ? "" : "ies"} in view · amber markers and broken lines`
+        : "No reported stream discontinuities in the selected view"}
+      {" · Missing samples remain blank (not zero)."}
+    </p>
     <div className="plot-legend">{signals.map(signal =>
       <button key={signal.id} type="button"
         className={hidden.includes(signal.id) ? "legend-item disabled" : "legend-item"}
@@ -281,6 +299,14 @@ export function TimeSeriesChart({ frames, signals, title = "Time series" }: Prop
       <button className="button small" type="button" onClick={() => setMarkers({ a: null, b: null })}>
         Clear cursors</button>
       <span className="muted">Click to place A/B · wheel to zoom · Shift+drag to pan.</span>
+      <button className="button small" type="button"
+        disabled={!frames.length} onClick={() => measure(frames[0].timestamp_ms)}>
+        Place cursor at oldest sample
+      </button>
+      <button className="button small" type="button"
+        disabled={!frames.length} onClick={() => measure(frames[frames.length - 1].timestamp_ms)}>
+        Place cursor at latest sample
+      </button>
     </div>
 
     <div className="uplot-lanes">

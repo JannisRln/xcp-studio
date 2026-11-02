@@ -1,0 +1,9 @@
+.chart-gap-key {
+  margin: 4px 0 12px;
+  color: #e9bd87;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.value-tile .live-value-quality {
+  white-space: nowrap;
+}
