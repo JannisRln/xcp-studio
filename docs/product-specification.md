@@ -25,14 +25,14 @@ Primary workflows:
 4. Select or manually define signals; validate type, address, access rights and sample schedule.
 5. **Primary workflow: Live View.** Connect, select signals and start acquisition; immediately inspect fresh numeric values, update rate, timestamps and live plots. Explicit stop ends acquisition; export and recording are secondary, optional actions.
 6. Select a calibratable parameter, read it, preview a constrained change, confirm, write and verify by readback.
-7. Save workspace state, reopen it, review metadata and diagnostic events.
+7. Save a deterministic, Git-reviewable project, reopen it on another machine or application version, explicitly preview migrations, and review metadata and diagnostic events.
 
 ## 2. Release tracks and explicit non-goals
 
 | Track | Required outcome | Exclusions |
 | --- | --- | --- |
-| MVP v0.1 (P0) | End-to-end **simulator Live View**: connect → selected typed signal → XCP samples → current values/quality → chart → reconnect/stop, fully tested; guarded write/readback remains a separate P0 safety milestone | Mandatory full-session recording, production ECU safety certification, broad A2L and guaranteed 1 kHz |
-| v0.2 (P1) | Optional durable backend recording/export, A2L conversions, persistent projects, enhanced diagnostics and PCAN/Vector connectivity with bench evidence | Unverified hardware writes |
+| MVP v0.1 (P0) | End-to-end **simulator Live View** and a Git-native project Save/Open/Reopen workflow with deterministic diffs, versioned non-destructive migration and offline validation; guarded write/readback remains a separate P0 safety milestone | Mandatory full-session recording, production ECU safety certification, broad A2L and guaranteed 1 kHz |
+| v0.2 (P1) | Optional durable backend recording/export, A2L conversions, richer project interoperability, enhanced diagnostics and PCAN/Vector connectivity with bench evidence | Unverified hardware writes |
 | Later (P2) | DAQ optimization and broad target coverage, XCP on Ethernet, richer calibration maps and high-volume recordings | Do not imply delivery before acceptance tests |
 
 Windows is the release-gating OS; Linux/macOS and Docker are not v0.1 requirements. Browser UI served locally is an implementation detail, not permission to expose ECU control on a public interface. Multi-user remote control is out of scope.
@@ -126,9 +126,15 @@ Windows is the release-gating OS; Linux/macOS and Docker are not v0.1 requiremen
 - Exports: CSV initially, scalable binary/columnar format may be added behind a documented schema. CSV includes timestamp, signal identity, unit, value semantics and missing-sample representation.
 - Project document has schema version, connection profile (excluding secrets), ELF/A2L references and fingerprints, signals, layouts, chart configuration and acquisition presets.
 - Atomic save (temp file then rename), migration path and unsupported-newer-version error; no silent destructive rewrite.
+- **Git-native project format is core functionality:** human-readable, deterministic, UTF-8 text with stable entity IDs, minimal diff churn, meaningful field-level review and independently mergeable signals/views/presets. Git remains optional; the canonical storage must work on an ordinary local filesystem.
+- Persist meaningful user-controlled ordering explicitly rather than relying on incidental JSON array order; avoid volatile timestamps, random IDs per save, machine-specific absolute paths and hidden local secrets in tracked configuration. Keep large recordings and binary ECU artifacts outside the tracked project by default; verify external ELF/A2L fingerprints on load.
+- **All stored file paths are relative to the containing project manifest file's directory**, even if a reference occurs in a nested signal/view/preset file. Resolution must never depend on process CWD, app executable location or Git root. Persist normalized portable `/` paths, not absolute/UNC/URL paths. Internal project files must not traverse outside the project root. External read-only ELF/A2L references may use an explicit relative `../` path only after validating canonical paths/symlinks, obtaining user-authorized access and checking file fingerprints. Missing/replaced files are reported, not silently rebound. Legacy basename-only migrations cannot guess a target path.
+- Version every incompatible project layout change; offer a read-only migration preview showing semantic and file changes before any write, support deterministic/idempotent migration fixtures and reject unknown/newer or conflicting content without silent data loss.
+- A multi-file workspace save must be crash-safe **as a set**; per-file atomic rename alone is insufficient. Preserve the last verified project or a recoverable generation after interruption, disk-full or permission failure.
+- Provide offline project schema/reference/conflict validation suitable for CI and Git workflows. Loading a saved configuration never authorizes ECU access, converts ELF link-time addresses to runtime addresses, or enables hardware writes. See [ADR 0003](adr/0003-git-native-projects.md) (proposed design, not an implemented schema).
 - Import of untrusted project/ELF/A2L data has size/format limits and no arbitrary file execution.
 
-**Acceptance:** save/reopen identical workspace, checksum/metadata mismatch indication, invalid/corrupt files handled without data loss.
+**Acceptance:** save/reopen identical workspace; unchanged save creates no Git diff; editing independent signals produces reviewable non-overlapping changes; v1/v2→future migration previews are deterministic and non-destructive; invalid/conflicted/newer/corrupt files and checksum/metadata mismatch are safely rejected without ECU I/O or data loss.
 
 ### 3.8 Diagnostics and observability
 
@@ -196,8 +202,9 @@ Windows is the release-gating OS; Linux/macOS and Docker are not v0.1 requiremen
 6. Import failures, disconnected ECU, stream loss and invalid addresses have deterministic error states.
 7. No critical functionality depends on synthetic frontend generators or undocumented assumptions.
 8. Tests, commands, fixture inputs, evidence and known limitations are linked from the implementing tickets.
+9. A Git-tracked project can be saved unchanged without file churn, independently edited and validated, reopened safely, and migrated from supported versions with preview, reproducible fixtures and interruption recovery evidence.
 
-**v0.2 additionally requires:** validated A2L conversions, versioned project reopen, hardware connection bench run, transport capability errors and operator documentation.
+**v0.2 additionally requires:** validated A2L conversions, advanced project interoperability, hardware connection bench run, transport capability errors and operator documentation.
 
 ## 9. Traceability and change process
 

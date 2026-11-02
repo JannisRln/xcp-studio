@@ -11,10 +11,33 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
-      - name: Format Rust workspace in CI runner
-        run: cargo fmt --all
-      - name: Check formatted Rust workspace
+      - name: Format workspace and reject unformatted PR Rust changes
+        shell: pwsh
+        run: |
+          # The existing main baseline contains rustfmt debt. Check every Rust
+          # source modified by this PR before accepting runner normalization.
+          $baseBranch = "${{ github.base_ref }}"
+          if ([string]::IsNullOrWhiteSpace($baseBranch)) { $baseBranch = "main" }
+          $base = (git merge-base HEAD "origin/$baseBranch")
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($base)) {
+            throw "Cannot determine the PR merge base for Rust format validation"
+          }
+          $changed = @(git diff --name-only --diff-filter=ACMRT $base HEAD -- '*.rs')
+          if ($LASTEXITCODE -ne 0) { throw "Cannot inspect PR Rust files" }
+          cargo fmt --all
+          if ($LASTEXITCODE -ne 0) { throw "Rust formatting failed" }
+          $reformatted = @(git diff --name-only --diff-filter=M -- '*.rs')
+          if ($LASTEXITCODE -ne 0) { throw "Cannot inspect rustfmt edits" }
+          $offenders = @($changed | Where-Object { $reformatted -contains $_ })
+          if ($offenders.Count -gt 0) {
+            Write-Host "Unformatted Rust files changed by this PR:"
+            $offenders | ForEach-Object { Write-Host "  $_" }
+            throw "Commit cargo fmt changes to all touched Rust files"
+          }
+      - name: Check normalized Rust workspace
         run: cargo fmt --all -- --check
       - name: Lint Rust workspace
         run: cargo clippy --workspace --all-targets -- -D warnings
@@ -65,6 +88,19 @@ jobs:
         env:
           XCP_E2E_SCREENSHOT: ${{ runner.temp }}\\xcp-live-view.png
         run: node scripts/live-view-e2e.mjs
+      - name: Extended real Rust/Vite/uPlot browser acceptance (pause, reconnect, CSV, cursors)
+        run: node frontend/src/features/measurements/live-view.browser-e2e.mjs
+      - name: Measure 20k-frame uPlot browser rendering (synthetic; no throughput claim)
+        env:
+          XCP_BENCH_OUTPUT: ${{ runner.temp }}\\xcp-uplot-20k-benchmark.json
+        run: node frontend/src/features/measurements/live-view.bench.mjs
+      - name: Upload measured 20k-frame browser benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcp-uplot-20k-benchmark-windows
+          path: ${{ runner.temp }}\\xcp-uplot-20k-benchmark.json
+          if-no-files-found: warn
       - name: Upload actual browser screenshot of Live View
         if: always()
         uses: actions/upload-artifact@v4

@@ -89,12 +89,18 @@
 | UI-003 | P0 | Keyboard-accessible critical flows. | Keyboard/focus/a11y tests; E2E | T-0002 |
 | UI-004 | P0 | Responsive dashboard and bounded chart rendering. | Desktop/narrow visual and performance tests; RV | T-0002 |
 | UI-005 | P0 | Display real sample source/quality clearly. | Demo vs ECU values never conflated; E2E | T-0006 |
-| UI-006 | P1 | Remember signal selection and layouts. | Save/reload project; IT | T-0010 |
-| PROJ-001 | P1 | Version and validate project schema. | Old/current/newer fixtures; AT | T-0010 |
-| PROJ-002 | P1 | Store connection profiles, file fingerprints, signals and layouts. | Round-trip match; IT | T-0010 |
-| PROJ-003 | P1 | Atomic save with corrupt-file protection. | Crash/invalid-file simulation; IT | T-0010 |
-| PROJ-004 | P1 | Provide migrations for supported schemas. | Migration fixtures; AT | T-0010 |
-| PROJ-005 | P1 | Distinguish missing/stale referenced ELF/A2L. | Stale-file scenario; IT | T-0010 |
+| UI-006 | P0 | Remember signal selection and layouts. | Save/reload project; IT | T-0010 |
+| PROJ-001 | P0 | Version and validate project schema. | Old/current/newer fixtures; AT | T-0010 |
+| PROJ-002 | P0 | Store connection profiles, file fingerprints, signals and layouts. | Round-trip match; IT | T-0010 |
+| PROJ-003 | P0 | Atomic save with corrupt-file protection. | Crash/invalid-file simulation; IT | T-0010 |
+| PROJ-004 | P0 | Provide migrations for supported schemas. | Migration fixtures; AT | T-0010 |
+| PROJ-005 | P0 | Distinguish missing/stale referenced ELF/A2L. | Stale-file scenario; IT | T-0010 |
+| PROJ-006 | P0 | Canonical text serialization with stable identities and minimal Git diffs. | Unchanged save is byte-identical; single signal change has focused diff; AT | T-0010 |
+| PROJ-007 | P0 | Keep independently edited project entities mergeable; detect semantic conflicts. | Two-branch disjoint edit and conflicting-ID/field fixtures; AT/IT | T-0010 |
+| PROJ-008 | P0 | Preview explicit, deterministic, non-destructive project migrations. | Multi-version golden fixtures; idempotence, no data loss, rejected newer format; AT/E2E | T-0010 |
+| PROJ-009 | P0 | Keep tracked project configuration portable and free of secrets, machine-local state and large recordings. | Cross-machine path/fingerprint, traversal and redaction fixtures; AT/IT | T-0010 |
+| PROJ-010 | P0 | Validate Git-tracked project files offline without ECU access. | CLI/CI fixture test with conflict markers, missing refs and schema errors; IT | T-0010 |
+| PROJ-011 | P0 | Persist all file references as normalized relative paths resolved against the project manifest directory, never CWD/Git root/executable or nested entity directory. | Move/clone/CWD fixtures; internal traversal, symlink and absolute-path rejection; explicitly authorized external `../` ELF/A2L read-only references with fingerprint checks; AT/IT | T-0010 |
 | DIAG-001 | P0 | Structured errors and correlation context. | Reproducible simulator faults; IT | T-0012 |
 | DIAG-002 | P0 | Expose acquisition rate/drop/timeout counters. | Metrics integration tests; IT | T-0005 |
 | DIAG-003 | P1 | Export redacted diagnostic bundle. | Sensitive data omitted; AT | T-0016 |

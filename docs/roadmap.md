@@ -25,6 +25,18 @@ This roadmap sequences work against the [complete product specification](product
 
 **Live-View exit:** one acquisition for multiple subscribers; live samples from known simulated ECU values; no tab-driven duplicated acquisition; visible data freshness/receive rate, recovery from dropped connections and bounded chart memory. CSV is optional and not a completion gate for watching live values.
 
+## Milestone M1b — Git-native, migratable engineering projects (P0)
+
+**Goal:** Workspace configuration is a first-class, reviewable engineering artifact. Saving an unchanged project must produce zero Git diff; schema changes require deterministic, previewable, non-destructive migrations. This milestone follows usable Live View and is part of the simulator application's release criteria, not a deferred convenience feature.
+
+- T-0010: canonical plain-text project representation, stable IDs, split-by-entity or similarly low-conflict layout, portable identity references, deterministic canonical export and semantic validation.
+- Every persisted file reference resolves relative to the project manifest directory on all machines; external `../` ELF/A2L references are read-only and fingerprint-verified, and internal project files cannot traverse outside the project tree.
+- Versioned, explicit old→new migrations with dry-run change preview, corruption/conflict rejection, backup/rollback strategy and interrupted-save safety.
+- Functional Save/Open/Reopen from the UI, safe ELF/A2L identity reconciliation, and offline project validation suitable for Git CI.
+- [ADR 0003](adr/0003-git-native-projects.md) proposes the architecture; freeze a revised format only after the T-0010/T-0012 owners approve it. PR #51's single-file v1/v2 codec remains a compatibility starting point rather than an accepted multi-file v3 implementation.
+
+**Exit:** multiple independently edited signal files merge cleanly; unchanged save has no diff; supported legacy projects migrate with a readable preview and no silent loss; malformed/conflicted/stale-identity projects cannot trigger ECU I/O or overwrite last verified data.
+
 ## Milestone M2 — Verified simulated calibration and release acceptance
 
 - T-0007 safe preview/write/readback verification and negative cases.
@@ -36,7 +48,7 @@ This roadmap sequences work against the [complete product specification](product
 
 - T-0008 A2L parsing and metadata reconciliation.
 - T-0009 PCAN and Vector VN1640A production adapter integration and separate HIL results.
-- T-0010 versioned project save/load, migrations and referenced image validation.
+- Advanced project interchange and multi-machine deployment enhancements beyond M1b, without weakening Git-native project compatibility.
 - T-0016 structured diagnostics, support bundle and redaction.
 
 **Exit:** reproducible Windows hardware read session (not necessarily hardware writes), A2L conversion fixtures, workspace reopening and robust diagnostics.

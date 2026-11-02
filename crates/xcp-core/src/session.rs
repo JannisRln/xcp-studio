@@ -112,7 +112,9 @@ impl SessionHandle {
         };
         match self.commands.try_send(command(request)) {
             Ok(()) => {}
-            Err(TrySendError::Full(_)) => return Err(SessionError::Xcp(XcpError::CommandQueueFull)),
+            Err(TrySendError::Full(_)) => {
+                return Err(SessionError::Xcp(XcpError::CommandQueueFull))
+            }
             Err(TrySendError::Disconnected(_)) => return Err(SessionError::WorkerStopped),
         }
         match receiver.recv_timeout(self.timeout) {
@@ -348,8 +350,14 @@ mod tests {
         let actor = actor();
         let handle = actor.handle();
         assert_eq!(handle.state().unwrap(), SessionState::Disconnected);
-        assert!(matches!(handle.read(0x1000, 4), Err(SessionError::Disconnected)));
-        assert!(matches!(handle.write(0x1000, &[1]), Err(SessionError::Disconnected)));
+        assert!(matches!(
+            handle.read(0x1000, 4),
+            Err(SessionError::Disconnected)
+        ));
+        assert!(matches!(
+            handle.write(0x1000, &[1]),
+            Err(SessionError::Disconnected)
+        ));
         let response = handle.connect().unwrap();
         assert!(!response.is_empty());
         assert_eq!(handle.connect().unwrap(), response);

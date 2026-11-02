@@ -148,7 +148,10 @@ fn validate(headers: &HeaderMap) -> Result<(), &'static str> {
         return Err("ambiguous browser fetch metadata");
     }
     if let Some(site) = headers.get("sec-fetch-site") {
-        match site.to_str().map_err(|_| "invalid browser fetch metadata")? {
+        match site
+            .to_str()
+            .map_err(|_| "invalid browser fetch metadata")?
+        {
             "none" | "same-origin" | "same-site" => {}
             _ => return Err("cross-site browser requests are not permitted"),
         }
@@ -195,8 +198,13 @@ pub async fn local_api_guard(
     next: Next,
 ) -> Response {
     if let Err(message) = validate(request.headers()) {
-        return error(StatusCode::FORBIDDEN, "LOCAL_ORIGIN_FORBIDDEN", message, false)
-            .into_response();
+        return error(
+            StatusCode::FORBIDDEN,
+            "LOCAL_ORIGIN_FORBIDDEN",
+            message,
+            false,
+        )
+        .into_response();
     }
     let elf = request.uri().path() == "/api/elf/inspect";
     if let Err(status) = validate_content_length(request.headers(), request.uri().path()) {
@@ -285,16 +293,26 @@ mod tests {
     #[test]
     fn denies_cross_site_dns_rebinding_and_ambiguous_headers() {
         for host in [
-            "evil.example:8080", "localhost.evil.example:8080", "127.0.0.2:8080",
-            "localhost:bad", "localhost:0", "localhost:65536",
+            "evil.example:8080",
+            "localhost.evil.example:8080",
+            "127.0.0.2:8080",
+            "localhost:bad",
+            "localhost:0",
+            "localhost:65536",
         ] {
             assert!(validate(&headers(host, None)).is_err(), "{host}");
         }
         for origin in [
-            "https://evil.example", "null", "http://localhost.evil.example:5173",
-            "http://localhost:5174", "http://localhost:5173/evil",
+            "https://evil.example",
+            "null",
+            "http://localhost.evil.example:5173",
+            "http://localhost:5174",
+            "http://localhost:5173/evil",
         ] {
-            assert!(validate(&headers("localhost:8080", Some(origin))).is_err(), "{origin}");
+            assert!(
+                validate(&headers("localhost:8080", Some(origin))).is_err(),
+                "{origin}"
+            );
         }
         assert!(validate(&HeaderMap::new()).is_err());
 
@@ -302,7 +320,10 @@ mod tests {
         duplicate_hosts.append(header::HOST, HeaderValue::from_static("localhost:8080"));
         assert!(validate(&duplicate_hosts).is_err());
         let mut duplicate_origins = headers("localhost:8080", Some("http://localhost:5173"));
-        duplicate_origins.append(header::ORIGIN, HeaderValue::from_static("https://evil.example"));
+        duplicate_origins.append(
+            header::ORIGIN,
+            HeaderValue::from_static("https://evil.example"),
+        );
         assert!(validate(&duplicate_origins).is_err());
     }
 
@@ -321,12 +342,23 @@ mod tests {
         assert_eq!(body_budget("/api/xcp/snapshot"), 16 * 1024);
         for (path, length, status) in [
             ("/api/xcp/read", "16385", StatusCode::PAYLOAD_TOO_LARGE),
-            ("/api/elf/inspect", "33554433", StatusCode::PAYLOAD_TOO_LARGE),
+            (
+                "/api/elf/inspect",
+                "33554433",
+                StatusCode::PAYLOAD_TOO_LARGE,
+            ),
             ("/api/xcp/read", "bad", StatusCode::BAD_REQUEST),
-            ("/api/xcp/read", "18446744073709551616", StatusCode::BAD_REQUEST),
+            (
+                "/api/xcp/read",
+                "18446744073709551616",
+                StatusCode::BAD_REQUEST,
+            ),
         ] {
             let mut headers = headers("localhost:8080", None);
-            headers.insert(header::CONTENT_LENGTH, HeaderValue::from_str(length).unwrap());
+            headers.insert(
+                header::CONTENT_LENGTH,
+                HeaderValue::from_str(length).unwrap(),
+            );
             assert_eq!(validate_content_length(&headers, path), Err(status));
         }
         let mut headers = headers("localhost:8080", None);
@@ -342,7 +374,10 @@ mod tests {
     #[test]
     fn fixed_window_rate_counter_recovers_after_expiry() {
         let start = Instant::now();
-        let mut rate = RateWindow { began: start, used: 0 };
+        let mut rate = RateWindow {
+            began: start,
+            used: 0,
+        };
         for _ in 0..MAX_REQUESTS_PER_SECOND {
             assert!(rate.allow_at(start));
         }

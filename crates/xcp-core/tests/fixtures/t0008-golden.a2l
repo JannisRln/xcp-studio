@@ -1,0 +1,32 @@
+ASAP2_VERSION 1 71
+/begin PROJECT demo "Synthetic, redistributable fixture"
+  /begin MODULE powertrain "No hardware access"
+    /begin MOD_COMMON ""
+      BYTE_ORDER MSB_LAST
+    /end MOD_COMMON
+    /begin COMPU_METHOD speed_linear "RPM conversion" LINEAR "%6.2" "rpm"
+      COEFFS_LINEAR 0.25 -40
+    /end COMPU_METHOD
+    /begin COMPU_METHOD temp_rational "Temperature" RAT_FUNC "%5.2" "degC"
+      COEFFS 0 2 4 0 0 1
+    /end COMPU_METHOD
+    /begin COMPU_METHOD unsupported_table "Unsupported table" TAB_INTP "%5.1" "%"
+      COMPU_TAB_REF table_missing
+    /end COMPU_METHOD
+    /begin RECORD_LAYOUT scalar_u16
+      FNC_VALUES 0 UWORD ROW_DIR DIRECT
+    /end RECORD_LAYOUT
+    /begin MEASUREMENT engine_speed "Engine speed" UWORD speed_linear 1 0 -40 8000
+      ECU_ADDRESS 0x1000
+    /end MEASUREMENT
+    /begin MEASUREMENT coolant_temp "Coolant" SWORD temp_rational 1 0 -100 200
+      ECU_ADDRESS 0x1002
+    /end MEASUREMENT
+    /begin MEASUREMENT unsupported "No table evaluation" UBYTE unsupported_table 1 0 0 100
+      ECU_ADDRESS 0x1100
+    /end MEASUREMENT
+    /begin CHARACTERISTIC torque_request "Torque request" VALUE 0x2000
+      scalar_u16 0 speed_linear 0 100
+    /end CHARACTERISTIC
+  /end MODULE
+/end PROJECT
