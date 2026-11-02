@@ -24,7 +24,7 @@
 
 | ID | Ticket | Priority | Status | Depends on | GitHub issue |
 | --- | --- | --- | --- | --- | --- |
-| T-0008 | [A2L metadata and conversions](T-0008-a2l-import-mapping.md) | P1 | blocked | T-0003 | [#11](https://github.com/JannisRln/xcp-studio/issues/11) |
+| T-0008 | [A2L metadata and conversions](T-0008-a2l-import-mapping.md) | P1 | in-progress | T-0003 | [#11](https://github.com/JannisRln/xcp-studio/issues/11) |
 | T-0009 | [PCAN + Vector Windows transport](T-0009-can-hardware-adapters.md) | P1 | blocked | T-0004, T-0013 | [#12](https://github.com/JannisRln/xcp-studio/issues/12) |
 | T-0010 | [Project persistence](T-0010-project-persistence.md) | P1 | in-progress | T-0002, T-0012 | [#13](https://github.com/JannisRln/xcp-studio/issues/13) |
 | T-0015 | [Durable backend recording](T-0015-backend-recording-store.md) | P1 | blocked | T-0005, T-0012 | [#9](https://github.com/JannisRln/xcp-studio/issues/9) |
