@@ -16,8 +16,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Format experimental crate in runner (workspace main may be unformatted)
-        run: cargo fmt -p xcp-desktop
+      - name: Format experimental crate in runner (inspect committed source changes)
+        shell: pwsh
+        run: |
+          cargo fmt -p xcp-desktop
+          if ($LASTEXITCODE -ne 0) { throw 'rustfmt failed' }
+          git diff -- crates/xcp-desktop/src
+          if ($LASTEXITCODE -ne 0) { throw 'cannot inspect rustfmt output' }
       - name: Check experimental crate formatting
         run: cargo fmt -p xcp-desktop -- --check
       - name: Lint native crate
