@@ -47,12 +47,24 @@ impl HardwareAccessPolicy {
 /// Does not imply that a physical adapter has been activated or validated.
 pub fn verify_startup_policy() -> Result<(), &'static str> {
     let policy = HardwareAccessPolicy;
-    if policy.authorize(Target::Simulator, Operation::ReadMemory).is_err()
-        || policy.authorize(Target::PhysicalVerified, Operation::ReadMemory).is_err()
-        || policy.authorize(Target::PhysicalUnverified, Operation::ReadMemory).is_ok()
-        || policy.authorize(Target::Simulator, Operation::WriteMemory).is_ok()
-        || policy.authorize(Target::PhysicalVerified, Operation::WriteMemory).is_ok()
-        || policy.authorize(Target::PhysicalUnverified, Operation::WriteMemory).is_ok()
+    if policy
+        .authorize(Target::Simulator, Operation::ReadMemory)
+        .is_err()
+        || policy
+            .authorize(Target::PhysicalVerified, Operation::ReadMemory)
+            .is_err()
+        || policy
+            .authorize(Target::PhysicalUnverified, Operation::ReadMemory)
+            .is_ok()
+        || policy
+            .authorize(Target::Simulator, Operation::WriteMemory)
+            .is_ok()
+        || policy
+            .authorize(Target::PhysicalVerified, Operation::WriteMemory)
+            .is_ok()
+        || policy
+            .authorize(Target::PhysicalUnverified, Operation::WriteMemory)
+            .is_ok()
     {
         return Err("hardware access policy failed closed");
     }
@@ -90,7 +102,10 @@ mod tests {
             policy.authorize(Target::PhysicalVerified, Operation::ReadMemory),
             Ok(())
         );
-        assert_eq!(policy.authorize(Target::Simulator, Operation::ReadMemory), Ok(()));
+        assert_eq!(
+            policy.authorize(Target::Simulator, Operation::ReadMemory),
+            Ok(())
+        );
         assert_ne!(Target::PhysicalUnverified, Target::Simulator);
     }
 }

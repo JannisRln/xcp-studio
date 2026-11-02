@@ -45,7 +45,10 @@ fn reads_nested_struct_union_array_typedef_and_pointer_layout() {
     assert_eq!(channel.descriptor.byte_size, Some(8));
     assert_eq!(channel.descriptor.members[0].byte_offset, Some(0));
     assert_eq!(channel.descriptor.members[1].byte_offset, Some(4));
-    assert_eq!(channel.descriptor.members[1].descriptor.kind, TypeKind::Union);
+    assert_eq!(
+        channel.descriptor.members[1].descriptor.kind,
+        TypeKind::Union
+    );
 
     let value = image
         .variables
