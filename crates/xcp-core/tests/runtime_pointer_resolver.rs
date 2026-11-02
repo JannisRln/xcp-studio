@@ -366,6 +366,49 @@ fn rejects_mismatched_layout_or_pointee_metadata() {
 }
 
 #[test]
+fn rejects_root_objects_outside_verified_relocation_without_memory_reads() {
+    let image = target(4, TargetEndian::Little);
+    let map = mapping(4, TargetEndian::Little);
+    let node = node(4);
+    let path = [PathStep::Dereference { pointee: &node }];
+    let mut memory = MockMemory::new(identity());
+
+    // The approved read region is larger than the verified image mapping.
+    // A root pointer starting at the last mapped byte must never be read.
+    memory.put_pointer(0x10ff, 0x1200, 4, TargetEndian::Little);
+    let mut straddling_root = variable(4);
+    straddling_root.address = AddressProvenance::LinkTime(0x1ff);
+    assert_eq!(
+        resolve(
+            &mut memory,
+            &straddling_root,
+            &image,
+            RootLocation::Mapped(&map),
+            &path,
+            &[region(0x1000, 0x1000)],
+            42,
+        )
+        .unwrap_err(),
+        ResolveError::InvalidMapping
+    );
+    assert_eq!(memory.reads, 0);
+
+    let mut missing_size = variable(4);
+    missing_size.descriptor.byte_size = None;
+    assert_eq!(
+        solve(&mut memory, &missing_size, &image, &map, &[]).unwrap_err(),
+        ResolveError::UnknownSize
+    );
+    let mut zero_size = variable(4);
+    zero_size.descriptor.byte_size = Some(0);
+    assert_eq!(
+        solve(&mut memory, &zero_size, &image, &map, &[]).unwrap_err(),
+        ResolveError::UnknownSize
+    );
+    assert_eq!(memory.reads, 0);
+}
+
+#[test]
 fn guards_mapping_regions_and_address_arithmetic() {
     let mut memory = MockMemory::new(identity());
     let image = target(8, TargetEndian::Little);

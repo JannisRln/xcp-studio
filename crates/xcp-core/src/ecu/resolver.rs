@@ -265,7 +265,14 @@ pub fn resolve<R: MemoryReader>(
         AddressProvenance::LinkTime(address) => address,
         _ => unreachable!("location was checked above"),
     };
-    if !mapping.link_region.contains(link_address, 1) {
+    // Verify the complete root object, not just its first byte. A wider
+    // approved read region must not extend a trusted image relocation.
+    let root_size = variable.descriptor.byte_size.ok_or(ResolveError::UnknownSize)?;
+    if root_size == 0 {
+        return Err(ResolveError::UnknownSize);
+    }
+    check_address(link_address, root_size, mapping.pointer_bytes)?;
+    if !mapping.link_region.contains(link_address, root_size) {
         return Err(ResolveError::InvalidMapping);
     }
     let offset = link_address - mapping.link_region.start;
@@ -274,7 +281,10 @@ pub fn resolve<R: MemoryReader>(
         .start
         .checked_add(offset)
         .ok_or(ResolveError::AddressOverflow)?;
-    check_address(address, 1, mapping.pointer_bytes)?;
+    check_address(address, root_size, mapping.pointer_bytes)?;
+    if !mapping.runtime_region.contains(address, root_size) {
+        return Err(ResolveError::InvalidMapping);
+    }
 
     let mut descriptor = &variable.descriptor;
     let mut steps = Vec::with_capacity(path.len());
