@@ -48,6 +48,8 @@
 
 **Integration reconciliation (2026-11-01):** PRs #39/#40/#42/#43/#45/#46 were squash-merged, and `main` CI [41324320683](https://github.com/JannisRln/xcp-studio/actions/runs/41324320683) passed. T-0003/T-0004/T-0013 are READY for remaining acceptance/implementation, not DONE; merged PR #46 leaves T-0012 BLOCKED for explicit independent T-0005/T-0006 owner contract sign-off. T-0006 remains in progress with separately coordinated follow-up work; do not overwrite new claims. The default branch reports `protected: false` and repository ruleset list is empty, so T-0001 stays BLOCKED until an administrator enables and verifies enforcement. See [integration review](../integration-review-2026-11-01.md).
 
+**T-0014 coordination:** `chatgpt-t0014-core` owns the standalone resolver phase in `feature/T-0014-bounded-pointer-core`. Overall integration is still blocked; no session, metadata, DTO, or frontend ownership is transferred. See its ticket for pending decisions.
+
 **Merge discipline:** one branch/owner per ticket; cross-module schema change via T-0012; dependencies must be confirmed DONE unless a narrowly scoped independent phase is documented in the ticket. A BLOCKED item is not automatically assignable. Green CI is necessary but not sufficient for acceptance.
 
 ## Completion rules
