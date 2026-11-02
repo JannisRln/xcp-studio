@@ -20,7 +20,7 @@ Every automated test needs reproducible input and expected output. Hardware benc
 ## 2. Current CI versus target gates
 
 **CI configuration delivered by T-0001 after this PR merges:**
-- Rust Windows runner: `cargo fmt --all -- --check` on the committed checkout **without prior autoformatting**, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace`. A formatting failure must fail required CI.
+- Rust Windows runner: compare PR-touched `.rs` files to the results of `cargo fmt --all` and **fail if rustfmt changed any touched file**; this closes the false-green gate for newly submitted Rust changes without changing unrelated, previously unformatted main files. Then check the normalized runner with `cargo fmt --all -- --check`, run `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace`. Full-repository baseline rustfmt cleanup remains a separate tracked task.
 - Frontend Windows runner: npm ci with a committed lockfile, npm run build and npm test.
 - Documentation Windows runner: python scripts/check_docs.py, validating frontmatter, index, requirement mappings, dependencies and links.
 - Existing workflow triggers pull_request and push to main. Branch-cleanup maintenance workflow runs on main pushes and removes only verified merged source branches.
@@ -28,7 +28,7 @@ Every automated test needs reproducible input and expected output. Hardware benc
 **Separate repository administration and later work:**
 - Enable required checks for rust/frontend/docs and PR review in GitHub's ruleset for main; [branch-protection.md](branch-protection.md) documents these steps. CI jobs by themselves do not establish that the ruleset is active.
 - Add browser/server simulator E2E and hardware bench evidence as later milestone work.
-- Formatting policy: CI checks committed sources directly without autoformatting; the local hook also checks formatting.
+- Formatting policy: CI normalizes its disposable checkout for existing baseline compatibility **but rejects unformatted Rust files changed by a PR**. The local hook checks formatting; a separate baseline normalization is required before a strict workspace-wide source check can replace the scoped PR gate.
 
 Useful local commands, when dependencies are installed:
 
